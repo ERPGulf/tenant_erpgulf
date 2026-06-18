@@ -43,7 +43,7 @@ http:
           - qmsS5p8wB/deliver_note.txt
   auth:
     type: bearer
-    token: U4IAo2bjQQp8OzNGd9IccWR9O2Rq4c
+    token: ""
 
 settings:
   encodeUrl: true

@@ -14,7 +14,7 @@ http:
         value: "918281693215"
   auth:
     type: bearer
-    token: nO54vgyTCskE5F5Ib2fNaoESkCr2rB
+    token: ""
 
 settings:
   encodeUrl: true

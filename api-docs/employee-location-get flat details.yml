@@ -14,7 +14,7 @@ http:
         value: adc
   auth:
     type: bearer
-    token: NBJDqgHCe4W2RnqZAGJMspHpJohVaR
+    token: ""
 
 settings:
   encodeUrl: true
