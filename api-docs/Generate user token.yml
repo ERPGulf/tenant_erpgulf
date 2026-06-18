@@ -1,0 +1,29 @@
+info:
+  name: Generate user token
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.tenant_erpgulf.token.generate_token_secure_for_users
+  body:
+    type: multipart-form
+    data:
+      - name: username
+        type: text
+        value: Administrator
+      - name: password
+        type: text
+        value: Friday2000@T
+      - name: app_key
+        type: text
+        value: dGVuYW50X2VycGd1bGY=
+  auth:
+    type: bearer
+    token: VLWmJIZBj0Z6VMxVpcSY3XvlwofXwn
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

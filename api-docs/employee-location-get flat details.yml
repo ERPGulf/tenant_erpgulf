@@ -1,0 +1,23 @@
+info:
+  name: employee-location-get flat details
+  type: http
+  seq: 8
+
+http:
+  method: GET
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.get_location_full_details
+  body:
+    type: multipart-form
+    data:
+      - name: location_name
+        type: text
+        value: adc
+  auth:
+    type: bearer
+    token: NBJDqgHCe4W2RnqZAGJMspHpJohVaR
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -256,3 +256,27 @@ app_license = "mit"
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
+doc_events = {
+    "Customer": {
+        "after_insert": "tenant_erpgulf.user_qr_code.create_qr_code",
+        "on_update": "tenant_erpgulf.user_qr_code.create_qr_code",
+    },
+    "Asset": {
+        "before_save": "tenant_erpgulf.asset.before_save",
+    },
+    "Asset Maintenance Log": {
+        "on_submit": "tenant_erpgulf.asset.on_submit",
+    },
+    "Employee": {
+        "on_update": "tenant_erpgulf.employee.create_qr_code",
+    }
+}
+override_doctype_class = {
+    "Asset Maintenance Log": "tenant_erpgulf.asset_maintenance_log.CustomAssetMaintenanceLog"
+}
+doctype_js = {
+    "Asset": "public/js/asset.js",
+    "Asset Maintenance Log":"public/js/asset_maintenance_log.js",
+    "Stock Entry":"public/js/stock_entry.js"
+
+}

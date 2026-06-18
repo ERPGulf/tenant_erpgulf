@@ -1,0 +1,23 @@
+info:
+  name: generate_otp
+  type: http
+  seq: 9
+
+http:
+  method: POST
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.generate_and_send_otp
+  body:
+    type: multipart-form
+    data:
+      - name: mobile_no
+        type: text
+        value: "918281693215"
+  auth:
+    type: bearer
+    token: nO54vgyTCskE5F5Ib2fNaoESkCr2rB
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

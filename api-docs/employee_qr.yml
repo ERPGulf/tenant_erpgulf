@@ -1,0 +1,23 @@
+info:
+  name: employee_qr
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.generate_employee_qr
+  body:
+    type: multipart-form
+    data:
+      - name: employee_id
+        type: text
+        value: HR-EMP-00002
+  auth:
+    type: bearer
+    token: 08sZYXGRv5WSPS382T4fWNSXU92bHV
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

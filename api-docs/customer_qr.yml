@@ -1,0 +1,23 @@
+info:
+  name: customer_qr
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.user_qr_code.generate_customer_qr
+  body:
+    type: multipart-form
+    data:
+      - name: customer_id
+        type: text
+        value: test customer
+  auth:
+    type: bearer
+    token: oPDlc5Ez8EOIIKQe9G7b4NpSLdfBzk
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,95 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "FLT-.####",
+ "creation": "2026-05-22 09:46:02.803540",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "flat_number",
+  "floor",
+  "building",
+  "compound",
+  "area",
+  "unit_type",
+  "bed_rooms__wash_rooms",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "flat_number",
+   "fieldtype": "Data",
+   "label": "Flat Number"
+  },
+  {
+   "fieldname": "floor",
+   "fieldtype": "Link",
+   "label": "Floor",
+   "options": "Floor"
+  },
+  {
+   "fetch_from": "floor.building",
+   "fieldname": "building",
+   "fieldtype": "Link",
+   "label": "Building",
+   "options": "Building"
+  },
+  {
+   "fetch_from": "building.compound",
+   "fieldname": "compound",
+   "fieldtype": "Link",
+   "label": "Compound",
+   "options": "Compound"
+  },
+  {
+   "description": "sqm",
+   "fieldname": "area",
+   "fieldtype": "Float",
+   "label": "Area"
+  },
+  {
+   "fieldname": "unit_type",
+   "fieldtype": "Int",
+   "label": "Unit Type"
+  },
+  {
+   "fieldname": "bed_rooms__wash_rooms",
+   "fieldtype": "Data",
+   "label": "Bed Rooms / Wash Rooms"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Sold\nEmpty\nRented\nSample"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-05-22 09:54:51.901203",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "Flat",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

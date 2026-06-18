@@ -1,0 +1,33 @@
+info:
+  name: validate_otp
+  type: http
+  seq: 10
+
+http:
+  method: POST
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.verify_otp?mobile_no=918281693215&otp=123456
+  params:
+    - name: mobile_no
+      value: "918281693215"
+      type: query
+    - name: otp
+      value: "123456"
+      type: query
+  body:
+    type: multipart-form
+    data:
+      - name: mobile_no
+        type: text
+        value: "918281693215"
+      - name: otp
+        type: text
+        value: "123456"
+  auth:
+    type: bearer
+    token: nO54vgyTCskE5F5Ib2fNaoESkCr2rB
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
