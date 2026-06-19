@@ -11,7 +11,7 @@ http:
     data:
       - name: customer_id
         type: text
-        value: test customer
+        value: customer test
   auth:
     type: bearer
     token: ""

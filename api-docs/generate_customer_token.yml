@@ -1,0 +1,27 @@
+info:
+  name: generate_customer_token
+  type: http
+  seq: 12
+
+http:
+  method: POST
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.customer_user_token.generate_token_secure_for_customers
+  body:
+    type: multipart-form
+    data:
+      - name: customer_id
+        type: text
+        value: test customer
+      - name: password
+        type: text
+        value: Friday2000@TR
+      - name: app_key
+        type: text
+        value: dGVuYW50X2VycGd1bGY=
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -195,9 +195,7 @@ def generate_employee_qr(employee_id):
             mimetype="application/json"
         )
 
-
-
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=False)
 def get_location_full_details(location_name):
     try:
         # ── STEP 1: Identify user from Bearer token ────────────────────────────
@@ -213,37 +211,18 @@ def get_location_full_details(location_name):
                 mimetype="application/json",
             )
 
-        # ── STEP 2: Resolve Employee from session user ─────────────────────────
-        employee_data = None
-
-        emp = frappe.db.get_value(
-            "Employee",
-            {"user_id": current_user},
-            ["name", "employee_name", "user_id"],
-            as_dict=True,
-        )
-
-        if emp:
-            employee_data = emp
-        else:
-            employee_data = {
-                "user_id": current_user,
-                "warning": f"No Employee record linked to user '{current_user}'"
-            }
-
-        # ── STEP 3: Validate Location ──────────────────────────────────────────
+        # ── STEP 2: Validate Location ──────────────────────────────────────────
         if not frappe.db.exists("Location", location_name):
             return Response(
                 json.dumps({
                     "status": "error",
                     "message": f"Location '{location_name}' not found",
-                    "employee": employee_data,
                 }),
                 status=404,
                 mimetype="application/json",
             )
 
-        # ── STEP 4: Fetch only required Location fields ────────────────────────
+        # ── STEP 3: Fetch only required Location fields ────────────────────────
         location = frappe.db.get_value(
             "Location",
             location_name,
@@ -261,7 +240,7 @@ def get_location_full_details(location_name):
             as_dict=True,
         )
 
-        # ── STEP 5: Fetch room_name from Room Equipment child table ────────────
+        # ── STEP 4: Fetch room_name from Room Equipment child table ────────────
         room_equipment = frappe.get_all(
             "Room Equipment",
             filters={"parent": location_name},
@@ -269,7 +248,7 @@ def get_location_full_details(location_name):
         )
         location["room_equipment"] = room_equipment
 
-        # ── STEP 6: Fetch all Assets linked to this Location ──────────────────
+        # ── STEP 5: Fetch all Assets linked to this Location ──────────────────
         assets = frappe.get_all(
             "Asset",
             filters={"location": location_name},
@@ -280,20 +259,21 @@ def get_location_full_details(location_name):
                 "item_name",
                 "location",
                 "asset_category",
+                "custom_room_name",
             ],
         )
 
-        # ── STEP 7: Enrich each Asset with Maintenance Logs ───────────────────
+        # ── STEP 6: Enrich each Asset with Maintenance Logs ───────────────────
         enriched_assets = []
 
         for asset in assets:
             asset_dict = dict(asset)
 
-            # ── 7a: Reactive logs → custom_asset = asset["name"] ──────────────
+            # ── 6a: Reactive logs → custom_asset = asset["name"] ──────────────
             reactive_logs = frappe.get_all(
                 "Asset Maintenance Log",
                 filters={
-                    "custom_asset":                  asset["name"],       # unique asset ID
+                    "custom_asset":                  asset["name"],
                     "custom_asset_maintenance_type": "Reactive",
                 },
                 fields=[
@@ -316,11 +296,11 @@ def get_location_full_details(location_name):
                 ],
             )
 
-            # ── 7b: Planned logs → asset_name = asset["asset_name"] ───────────
+            # ── 6b: Planned logs → asset_name = asset["asset_name"] ───────────
             planned_logs = frappe.get_all(
                 "Asset Maintenance Log",
                 filters={
-                    "asset_name":                    asset["asset_name"], # display name
+                    "asset_name":                    asset["asset_name"],
                     "custom_asset_maintenance_type": "Planned",
                 },
                 fields=[
@@ -343,10 +323,10 @@ def get_location_full_details(location_name):
                 ],
             )
 
-            # ── 7c: Merge both log types ───────────────────────────────────────
+            # ── 6c: Merge both log types ───────────────────────────────────────
             all_logs = reactive_logs + planned_logs
 
-            # ── 7d: Enrich each log with stock items ───────────────────────────
+            # ── 6d: Enrich each log with stock items ───────────────────────────
             enriched_logs = []
             for log in all_logs:
                 log_dict = dict(log)
@@ -370,13 +350,12 @@ def get_location_full_details(location_name):
             asset_dict["maintenance_logs"] = enriched_logs
             enriched_assets.append(asset_dict)
 
-        # ── STEP 8: Build and return final response ────────────────────────────
+        # ── STEP 7: Build and return final response ────────────────────────────
         return Response(
             json.dumps(
                 {
                     "status": "success",
                     "data": {
-                        "employee": employee_data,
                         "location": location,
                         "assets":   enriched_assets,
                     }
@@ -412,272 +391,8 @@ def get_location_full_details(location_name):
         )
 
 
-# import random
-
-# # ════════════════════════════════════════════════════════════════════════════════
-# # OTP — GENERATE & SEND via WhatsApp
-# # ════════════════════════════════════════════════════════════════════════════════
-
-# @frappe.whitelist(allow_guest=True)
-# def generate_and_send_otp(mobile_no):
-#     """
-#     Generate a 6-digit OTP, cache it for 5 minutes, and send via WhatsApp.
-
-#     Params:
-#         mobile_no : Customer mobile number (any format)
-#     """
-#     try:
-#         if not mobile_no:
-#             return Response(
-#                 json.dumps({
-#                     "status": "error",
-#                     "message": "mobile_no is required",
-#                 }),
-#                 status=400,
-#                 mimetype="application/json",
-#             )
-
-#         # ── STEP 1: Generate OTP ───────────────────────────────────────────────
-#         otp = str(random.randint(100000, 999999))
-
-#         # ── STEP 2: Cache OTP against mobile number (expires in 5 min) ────────
-#         key = f"otp:{mobile_no}"
-#         frappe.cache().set_value(key, otp, expires_in_sec=300)
-
-#         # ── STEP 3: Send OTP via WhatsApp ──────────────────────────────────────
-#         send_result = _send_otp_whatsapp(mobile_no, otp)
-
-#         if not send_result.get("success"):
-#             return Response(
-#                 json.dumps({
-#                     "status": "error",
-#                     "message": "OTP generated but WhatsApp delivery failed",
-#                     "detail": send_result.get("error"),
-#                 }),
-#                 status=500,
-#                 mimetype="application/json",
-#             )
-
-#         return Response(
-#             json.dumps({
-#                 "status":  "success",
-#                 "message": "OTP sent successfully",
-#                 "mobile":  mobile_no,
-#             }),
-#             status=200,
-#             mimetype="application/json",
-#         )
-
-#     except Exception as e:
-#         frappe.log_error(
-#             title="generate_and_send_otp error",
-#             message=frappe.get_traceback()
-#         )
-#         return Response(
-#             json.dumps({
-#                 "status":  "error",
-#                 "message": str(e),
-#             }),
-#             status=500,
-#             mimetype="application/json",
-#         )
 
 
-# # ════════════════════════════════════════════════════════════════════════════════
-# # OTP — VALIDATE
-# # ════════════════════════════════════════════════════════════════════════════════
-
-# @frappe.whitelist(allow_guest=True)
-# def verify_otp(mobile_no, otp):
-#     """
-#     Validate the OTP sent to a mobile number.
-#     OTP is deleted from cache after successful verification.
-
-#     Params:
-#         mobile_no : Same number used in generate_and_send_otp
-#         otp       : 6-digit OTP entered by user
-#     """
-#     try:
-#         if not mobile_no or not otp:
-#             return Response(
-#                 json.dumps({
-#                     "status":  "error",
-#                     "message": "mobile_no and otp are required",
-#                 }),
-#                 status=400,
-#                 mimetype="application/json",
-#             )
-
-#         # ── STEP 1: Fetch cached OTP ───────────────────────────────────────────
-#         key        = f"otp:{mobile_no}"
-#         stored_otp = frappe.cache().get_value(key)
-
-#         # ── STEP 2: Check if OTP exists ────────────────────────────────────────
-#         if not stored_otp:
-#             return Response(
-#                 json.dumps({
-#                     "status":  "error",
-#                     "message": "OTP expired or not found. Please request a new OTP.",
-#                 }),
-#                 status=404,
-#                 mimetype="application/json",
-#             )
-
-#         # ── STEP 3: Check if OTP matches ──────────────────────────────────────
-#         if str(stored_otp) != str(otp):
-#             return Response(
-#                 json.dumps({
-#                     "status":  "error",
-#                     "message": "Invalid OTP. Please try again.",
-#                 }),
-#                 status=400,
-#                 mimetype="application/json",
-#             )
-
-#         # ── STEP 4: OTP matched — delete from cache immediately ───────────────
-#         frappe.cache().delete_key(key)
-
-#         return Response(
-#             json.dumps({
-#                 "status":  "success",
-#                 "message": "OTP verified successfully",
-#                 "mobile":  mobile_no,
-#             }),
-#             status=200,
-#             mimetype="application/json",
-#         )
-
-#     except Exception as e:
-#         frappe.log_error(
-#             title="verify_otp error",
-#             message=frappe.get_traceback()
-#         )
-#         return Response(
-#             json.dumps({
-#                 "status":  "error",
-#                 "message": str(e),
-#             }),
-#             status=500,
-#             mimetype="application/json",
-#         )
-
-
-# # ════════════════════════════════════════════════════════════════════════════════
-# # INTERNAL — Send OTP via WhatsApp (not exposed as API)
-# # ════════════════════════════════════════════════════════════════════════════════
-
-# def _send_otp_whatsapp(mobile_no, otp):
-#     """
-#     Internal helper — sends OTP via WhatsApp using Whatsapp Saudi config.
-#     Returns {"success": True} or {"success": False, "error": "..."}
-#     """
-#     try:
-#         # ── Fetch WhatsApp config ──────────────────────────────────────────────
-#         wa_config    = frappe.get_doc("Whatsapp Saudi")
-#         url          = wa_config.get("message_url")
-#         instance_id  = wa_config.get("instance_id")
-#         token        = wa_config.get("token")
-
-#         # ── Clean phone number ─────────────────────────────────────────────────
-#         phone = _clean_phone_number(mobile_no)
-
-#         frappe.log_error(
-#             title="OTP WhatsApp send",
-#             message=f"To: {phone} | OTP: {otp}"
-#         )
-
-#         # ── Build message ──────────────────────────────────────────────────────
-#         message = (
-#             f"رمز التحقق لاستبدال نقاط الولاء في الجواد بريميوم هو *{otp}*.\n"
-#             "هذا الرمز صالح لمدة 5 دقائق يُرجى مشاركته مع أمين الصندوق للتحقق.\n\n"
-#             f"The verification code for redeeming your loyalty points in Aljawad Premium is *{otp}*. "
-#             "This is valid for 5 minutes. Please share it with the cashier for validation."
-#         )
-
-#         # ── Send request ───────────────────────────────────────────────────────
-#         querystring = {
-#             "instanceid": instance_id,
-#             "token":      token,
-#             "phone":      phone,
-#             "body":       message,
-#         }
-
-#         response      = requests.get(url, params=querystring, timeout=15)
-#         response_dict = response.json()
-
-#         frappe.log_error(
-#             title="OTP WhatsApp response",
-#             message=frappe.as_json(response_dict)
-#         )
-
-#         # ── Handle response ────────────────────────────────────────────────────
-#         if response.status_code == 200 and response_dict.get("sent") and response_dict.get("id"):
-#             # Log successful send
-#             frappe.get_doc({
-#                 "doctype": "whatsapp saudi success log",
-#                 "title":   "OTP sent successfully",
-#                 "message": otp,
-#                 "to_number": phone,
-#                 "time":    now_datetime(),
-#             }).insert(ignore_permissions=True)
-
-#             return {"success": True}
-
-#         else:
-#             frappe.log_error(
-#                 title="OTP WhatsApp send failed",
-#                 message=frappe.as_json(response_dict)
-#             )
-#             return {
-#                 "success": False,
-#                 "error":   response_dict,
-#             }
-
-#     except requests.exceptions.Timeout:
-#         frappe.log_error(
-#             title="OTP WhatsApp timeout",
-#             message=frappe.get_traceback()
-#         )
-#         return {"success": False, "error": "WhatsApp API timed out"}
-
-#     except Exception as e:
-#         frappe.log_error(
-#             title="OTP WhatsApp exception",
-#             message=frappe.get_traceback()
-#         )
-#         return {"success": False, "error": str(e)}
-
-
-# # ════════════════════════════════════════════════════════════════════════════════
-# # INTERNAL — Clean phone number
-# # ════════════════════════════════════════════════════════════════════════════════
-
-# def _clean_phone_number(number):
-#     """
-#     Normalize phone number to international format without + or 00 prefix.
-#     e.g. +966501234567 → 966501234567
-#          00966501234567 → 966501234567
-#          0501234567     → 966501234567
-#          501234567      → 966501234567
-#     """
-#     phone = number.replace("+", "").replace("-", "").replace(" ", "")
-
-#     if phone.startswith("00"):
-#         phone = phone[2:]
-#     elif phone.startswith("0"):
-#         if len(phone) == 10:
-#             phone = "966" + phone[1:]
-#     else:
-#         if len(phone) < 10:
-#             phone = "966" + phone
-
-#     if phone.startswith("0"):
-#         phone = phone[1:]
-
-#     return phone        
-# ════════════════════════════════════════════════════════════════════════════════
-# OTP — GENERATE & SEND via WhatsApp
-# ════════════════════════════════════════════════════════════════════════════════
 
 @frappe.whitelist(allow_guest=True)
 def generate_and_send_otp(mobile_no):

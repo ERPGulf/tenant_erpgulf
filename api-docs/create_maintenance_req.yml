@@ -39,8 +39,7 @@ http:
       - name: attachment_ids
         type: file
         value:
-          - e46CgaA5R/print_format.txt
-          - qmsS5p8wB/deliver_note.txt
+          - /Users/malavikag/Downloads/tenant erpgulf.postman_collection.json
   auth:
     type: bearer
     token: ""

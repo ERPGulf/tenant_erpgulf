@@ -1,86 +1,4 @@
-# import frappe
-# from frappe import _
-# import base64
-# from base64 import b64encode
-# import io
-# import os
-# from pyqrcode import create as qr_create
 
-
-# def create_qr_code(doc, method):
-#     """Create QR Code after inserting Customer"""
-#     if not hasattr(doc, 'custom_qr_code'):
-#         return
-
-#     fields = frappe.get_meta('Customer').fields
-#     auth_client_name = frappe.db.get_value("OAuth Client", {}, "name")
-#     if auth_client_name:
-#         auth_client = frappe.get_doc("OAuth Client", auth_client_name)
-#     else:
-#         frappe.throw("No OAuth Client found")
-
-#     app_name = auth_client.app_name
-#     if not app_name:
-#         frappe.throw(_('App name missing in OAuth Client'))
-#     client_secret = auth_client.client_secret  
-#     app_key = base64.b64encode(app_name.encode()).decode("utf-8")
-    
-
-#     for field in fields:
-#         if field.fieldname == 'custom_qr_code' and field.fieldtype == 'Attach Image':
-
-#             if not doc.name:
-#                 frappe.throw(_('Customer ID missing in the document'))
-
-#             if not doc.customer_name:
-#                 frappe.throw(_('Customer name missing in the document'))
-
-#             if not doc.customer_type:
-#                 frappe.throw(_('Customer type missing for {} in the document'.format(doc.name)))
-
-#             if not doc.customer_group:
-#                 frappe.throw(_('Customer group missing for {} in the document'.format(doc.name)))
-
-#             if not doc.territory:
-#                 frappe.throw(_('Territory missing for {} in the document'.format(doc.name)))
-
-#             if not frappe.local.conf.host_name:
-#                 frappe.throw(_('API URL (host_name) is missing in site config'))
-
-#             if not app_key:
-#                 frappe.throw(_('App key could not be generated'))
-
-#             cleaned = (
-#                 f"Customer_ID: {doc.name}"
-#                 f" Customer_Name: {doc.customer_name}"
-#                 f" Customer_Type: {doc.customer_type}"
-#                 f" Customer_Group: {doc.customer_group}"
-#                 f" Territory: {doc.territory}"
-#                 f" API: {frappe.local.conf.host_name}"
-#                 f" App_key: {app_key}"
-#                 f" Client_Secret: {client_secret}"
-#             )
-
-#             base64_string = b64encode(cleaned.encode()).decode()
-
-#             qr_image = io.BytesIO()
-#             url = qr_create(base64_string, error='L')
-#             url.png(qr_image, scale=2, quiet_zone=1)
-
-#             filename = f"QR-CODE-{doc.name}.png".replace(os.path.sep, "__")
-#             _file = frappe.get_doc({
-#                 "doctype": "File",
-#                 "file_name": filename,
-#                 "content": qr_image.getvalue(),
-#                 "is_private": 0
-#             })
-
-#             _file.save()
-
-#             doc.db_set('image', _file.file_url)
-#             doc.notify_update()
-
-#             break
 import frappe
 from frappe import _
 import base64
@@ -121,12 +39,6 @@ def create_qr_code(doc, method):
                 frappe.throw(_('Customer ID missing in the document'))
             if not doc.customer_name:
                 frappe.throw(_('Customer name missing in the document'))
-            if not doc.customer_type:
-                frappe.throw(_('Customer type missing for {} in the document'.format(doc.name)))
-            if not doc.customer_group:
-                frappe.throw(_('Customer group missing for {} in the document'.format(doc.name)))
-            if not doc.territory:
-                frappe.throw(_('Territory missing for {} in the document'.format(doc.name)))
             if not frappe.local.conf.host_name:
                 frappe.throw(_('API URL (host_name) is missing in site config'))
             if not app_key:
@@ -143,12 +55,8 @@ def create_qr_code(doc, method):
             cleaned = (
                 f"Customer_ID: {doc.name}"
                 f" Customer_Name: {doc.customer_name}"
-                f" Customer_Type: {doc.customer_type}"
-                f" Customer_Group: {doc.customer_group}"
-                f" Territory: {doc.territory}"
                 f" API: {frappe.local.conf.host_name}"
                 f" App_key: {app_key}"
-                f" Client_Secret: {client_secret}"
             )
 
             base64_string = b64encode(cleaned.encode()).decode()
@@ -172,7 +80,8 @@ def create_qr_code(doc, method):
             break
 
 
-@frappe.whitelist(allow_guest=False)
+
+@frappe.whitelist(allow_guest=True)
 def generate_customer_qr(customer_id):
     try:
         if not frappe.db.exists("Customer", customer_id):
@@ -234,12 +143,8 @@ def generate_customer_qr(customer_id):
         cleaned = (
             f"Customer_ID: {doc.name}"
             f" Customer_Name: {doc.customer_name}"
-            f" Customer_Type: {doc.customer_type}"
-            f" Customer_Group: {doc.customer_group}"
-            f" Territory: {doc.territory}"
             f" API: {host_name}"
             f" App_key: {app_key}"
-            f" Client_Secret: {client_secret}"
         )
 
         base64_string = b64encode(cleaned.encode()).decode()
@@ -252,13 +157,18 @@ def generate_customer_qr(customer_id):
         # ── Fix filename: remove path sep AND spaces ──────────────────────────
         filename = f"QR-CODE-{doc.name}.png".replace(os.path.sep, "__").replace(" ", "-")
 
+        # ── Save file with explicit site and linked to Customer ───────────────
+        qr_image.seek(0)
         _file = frappe.get_doc({
             "doctype": "File",
             "file_name": filename,
             "content": qr_image.getvalue(),
-            "is_private": 0
+            "is_private": 0,
+            "attached_to_doctype": "Customer",
+            "attached_to_name": customer_id,
         })
-        _file.save()
+        _file.insert(ignore_permissions=True)
+        frappe.db.commit()
 
         doc.db_set('custom_qr_code', _file.file_url)
         doc.notify_update()
@@ -276,214 +186,26 @@ def generate_customer_qr(customer_id):
                 "Content-Disposition": f"inline; filename={filename}",
                 "X-Customer-ID": doc.name,
                 "X-Customer-Name": doc.customer_name,
-                "X-QR-Code-URL": full_qr_url        # ← URL available in Headers tab
+                "X-QR-Code-URL": full_qr_url
             }
         )
 
     except Exception as e:
+        frappe.log_error(
+            title="generate_customer_qr error",
+            message=frappe.get_traceback()
+        )
         return Response(
-            json.dumps({"status": "error", "message": str(e)}),
+            json.dumps({
+                "status": "error",
+                "message": str(e) or "Unknown error - check Error Log in Frappe",
+                "traceback": frappe.get_traceback()
+            }),
             status=500,
             mimetype="application/json"
         )
 
-# import frappe
-# from frappe import _
 
-
-# @frappe.whitelist(allow_guest=False)
-# def get_customer_maintenance_data(customer_id):
-#     """
-#     API to get complete maintenance data for a customer.
-
-#     Endpoint:
-#       GET /api/method/your_app.api.customer_maintenance_api.get_customer_maintenance_data
-#           ?customer_id=CUST-0001
-
-#     Returns:
-#       - flats  (Location doctype, filtered by custom_customer)
-#           └── rooms  (custom_room_equipment child table rows)
-#                   └── assets  (Asset doctype, location=flat.name & custom_room_name=room.room_name)
-#       - maintenanceRequests  (with attachmentIds array)
-#       - priorityOptions      (Select options from Maintenance Request meta)
-#       - maintenanceTypes     (all rows from Maintenance Type doctype)
-#     """
-
-#     if not customer_id:
-#         frappe.throw(_("customer_id is required"), frappe.MandatoryError)
-
-#     # ─────────────────────────────────────────────────────────────
-#     # 1.  FLATS  (Location doctype — custom_customer = customer_id)
-#     # ─────────────────────────────────────────────────────────────
-
-#     flat_docs = frappe.get_all(
-#         "Location",
-#         filters={"custom_customer": customer_id},
-#         fields=[
-#             "name",
-#             "location_name",
-#             "custom_flat_number",
-#         ],
-#     )
-
-#     flats = []
-#     for flat in flat_docs:
-#         flat_name = flat["name"]  # e.g. "adc"
-
-#         # ── Rooms from custom_room_equipment child table ──────────
-#         rooms_raw = frappe.get_all(
-#             "Room Equipment",
-#             filters={"parent": flat_name, "parenttype": "Location"},
-#             fields=["name", "room_name"],
-#             order_by="idx asc",
-#         )
-
-#         rooms = []
-#         for room in rooms_raw:
-#             # ── Assets for this flat + room ───────────────────────
-#             assets_raw = frappe.get_all(
-#                 "Asset",
-#                 filters={
-#                     "location": flat_name,
-#                     "custom_room_name": room["room_name"],
-#                 },
-#                 fields=[
-#                     "name",
-#                     "asset_name",
-#                     "item_code",
-#                     "custom_room_name",
-#                 ],
-#             )
-
-#             rooms.append(
-#                 {
-#                     "roomId": room["name"],
-#                     "roomName": room["room_name"],
-#                     "assets": [
-#                         {
-#                             "assetId": a["name"],
-#                             "assetName": a["asset_name"],
-#                             "itemCode": a["item_code"],
-#                         }
-#                         for a in assets_raw
-#                     ],
-#                 }
-#             )
-
-#         flats.append(
-#             {
-#                 "flatId": flat_name,
-#                 "locationName": flat["location_name"],
-#                 "flatNumber": flat["custom_flat_number"],
-#                 "rooms": rooms,
-#             }
-#         )
-
-#     # ─────────────────────────────────────────────────────────────
-#     # 2.  MAINTENANCE REQUESTS  (with attachments)
-#     # ─────────────────────────────────────────────────────────────
-
-#     mr_list = frappe.get_all(
-#         "Maintenance Request",
-#         filters={"customer": customer_id},
-#         fields=[
-#             "name",
-#             "priority",
-#             "maintenance_type",
-#             "flat",
-#             "room",
-#             "asset",
-#             "location",
-#             "creation",
-#             "modified",
-#         ],
-#         order_by="creation desc",
-#     )
-
-#     maintenance_requests = []
-#     for req in mr_list:
-#         # File attachments
-#         attachments = frappe.get_all(
-#             "File",
-#             filters={
-#                 "attached_to_doctype": "Maintenance Request",
-#                 "attached_to_name": req["name"],
-#             },
-#             fields=["name", "file_name", "file_url", "file_size", "is_private"],
-#         )
-
-#         maintenance_requests.append(
-#             {
-#                 "name": req["name"],
-#                 "priority": req.get("priority"),
-#                 "maintenanceType": req.get("maintenance_type"),
-#                 "flatId": req.get("flat"),
-#                 "roomId": req.get("room"),
-#                 "assetId": req.get("asset"),
-#                 "location": req.get("location"),
-#                 "createdAt": str(req["creation"]) if req.get("creation") else None,
-#                 "updatedAt": str(req["modified"]) if req.get("modified") else None,
-#                 "attachmentIds": [att["name"] for att in attachments],
-#                 "attachments": [
-#                     {
-#                         "id": att["name"],
-#                         "fileName": att["file_name"],
-#                         "fileUrl": att["file_url"],
-#                         "fileSize": att["file_size"],
-#                         "isPrivate": bool(att["is_private"]),
-#                     }
-#                     for att in attachments
-#                 ],
-#             }
-#         )
-
-#     # ─────────────────────────────────────────────────────────────
-#     # 3.  PRIORITY OPTIONS  (from Maintenance Request meta)
-#     # ─────────────────────────────────────────────────────────────
-
-#     priority_options = []
-#     try:
-#         meta = frappe.get_meta("Maintenance Request")
-#         pf = meta.get_field("priority")
-#         if pf and pf.fieldtype == "Select" and pf.options:
-#             priority_options = [o.strip() for o in pf.options.split("\n") if o.strip()]
-#     except Exception:
-#         pass
-
-#     # ─────────────────────────────────────────────────────────────
-#     # 4.  MAINTENANCE TYPES  (Maintenance Type doctype)
-#     # ─────────────────────────────────────────────────────────────
-
-#     maintenance_types = []
-#     try:
-#         mt_list = frappe.get_all(
-#             "Maintenance Type",
-#             fields=["name", "maintenance_type_name", "description"],
-#             order_by="name asc",
-#         )
-#         maintenance_types = [
-#             {
-#                 "id": mt["name"],
-#                 "name": mt.get("maintenance_type_name") or mt["name"],
-#                 "description": mt.get("description"),
-#             }
-#             for mt in mt_list
-#         ]
-#     except Exception:
-#         pass
-
-#     # ─────────────────────────────────────────────────────────────
-#     # 5.  RESPONSE
-#     # ─────────────────────────────────────────────────────────────
-
-#     return {
-#         "success": True,
-#         "customerId": customer_id,
-#         "flats": flats,
-#         "maintenanceRequests": maintenance_requests,
-#         "priorityOptions": priority_options,
-#         "maintenanceTypes": maintenance_types,
-#     }
 
 import frappe
 from frappe import _
@@ -551,47 +273,7 @@ def get_customer_maintenance_data(customer_id):
             }
         )
 
-    # ─────────────────────────────────────────────────────────────
-    # 2.  ALL ATTACHMENTS — flat array of every file across all MRs
-    # ─────────────────────────────────────────────────────────────
 
-    # mr_list = frappe.get_all(
-    #     "Maintenance Request",
-    #     filters={"customer": customer_id},
-    #     fields=["name"],
-    # )
-
-    # mr_names = [r["name"] for r in mr_list]
-
-    # all_attachments = []
-    # if mr_names:
-    #     all_attachments_raw = frappe.get_all(
-    #         "File",
-    #         filters={
-    #             "attached_to_doctype": "Maintenance Request",
-    #             "attached_to_name": ["in", mr_names],
-    #         },
-    #         fields=[
-    #             "name",
-    #             "file_name",
-    #             "file_url",
-    #         ],
-    #         order_by="creation desc",
-    #     )
-
-    #     all_attachments = [
-    #         {
-    #             "id": att["name"],
-    #             "fileName": att["file_name"],
-    #             "fileUrl": att["file_url"],
-                
-    #         }
-    #         for att in all_attachments_raw
-    #     ]
-
-    # ─────────────────────────────────────────────────────────────
-    # 3.  PRIORITY OPTIONS — from Maintenance Request Select field
-    # ─────────────────────────────────────────────────────────────
 
     priority_options = []
     try:
@@ -799,201 +481,6 @@ def create_maintenance_request(
             "attachments":     attachments,
         },
     }
-
-# import frappe
-# from frappe import _
-
-
-# @frappe.whitelist(allow_guest=False)
-# def get_asset_maintenance_logs(customer_id, status="All"):
-
-#     if not customer_id:
-#         frappe.throw(_("customer_id is required"), frappe.MandatoryError)
-
-#     # ── Step 1: Get all Location names for this customer ──────────
-#     locations = frappe.get_all(
-#         "Location",
-#         filters={"custom_customer": customer_id},
-#         fields=["name"],
-#     )
-#     location_names = [l["name"] for l in locations]
-
-#     if not location_names:
-#         return _empty_response(customer_id, status)
-
-#     # ── Step 2: Get all Asset IDs in those locations ──────────────
-#     all_assets = frappe.get_all(
-#         "Asset",
-#         filters={"location": ["in", location_names]},
-#         fields=["name"],
-#     )
-#     asset_ids = [a["name"] for a in all_assets]
-
-#     if not asset_ids:
-#         return _empty_response(customer_id, status)
-
-#     # ─────────────────────────────────────────────────────────────
-#     # PATH A — Reactive
-#     # assetId = custom_asset (directly available)
-#     # ─────────────────────────────────────────────────────────────
-#     reactive_filters = {
-#         "docstatus": ["in", [0, 1]],
-#         "custom_asset_maintenance_type": "Reactive",
-#         "custom_asset": ["in", asset_ids],
-#     }
-#     if status.lower() == "open":
-#         reactive_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
-
-#     reactive_logs = frappe.get_all(
-#         "Asset Maintenance Log",
-#         filters=reactive_filters,
-#         fields=_log_fields(),
-#         order_by="creation desc",
-#     )
-
-#     # ─────────────────────────────────────────────────────────────
-#     # PATH B — Planned
-#     # assetId = Asset Maintenance.asset_name (Asset ID stored there)
-#     # Build a map: AM name → asset_name (Asset ID) for lookup later
-#     # ─────────────────────────────────────────────────────────────
-#     am_records = frappe.get_all(
-#         "Asset Maintenance",
-#         filters={"asset_name": ["in", asset_ids]},
-#         fields=["name", "asset_name"],
-#     )
-#     # map: AM doc name → Asset ID
-#     am_to_asset_id = {am["name"]: am["asset_name"] for am in am_records}
-#     am_names = list(am_to_asset_id.keys())
-
-#     planned_logs = []
-#     if am_names:
-#         planned_filters = {
-#             "docstatus": ["in", [0, 1]],
-#             "custom_asset_maintenance_type": "Planned",
-#             "asset_name": ["in", am_names],
-#         }
-#         if status.lower() == "open":
-#             planned_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
-
-#         planned_logs = frappe.get_all(
-#             "Asset Maintenance Log",
-#             filters=planned_filters,
-#             fields=_log_fields(),
-#             order_by="creation desc",
-#         )
-
-#     # ── Merge + deduplicate ───────────────────────────────────────
-#     seen = set()
-#     combined_logs = []
-#     for log in reactive_logs + planned_logs:
-#         if log["name"] not in seen:
-#             seen.add(log["name"])
-#             combined_logs.append(log)
-
-#     combined_logs.sort(key=lambda x: str(x.get("creation") or ""), reverse=True)
-
-#     # ── Build final response ──────────────────────────────────────
-#     logs = []
-#     for log in combined_logs:
-#         # Reactive → assetId from custom_asset
-#         # Planned  → assetId from Asset Maintenance.asset_name via am_to_asset_id map
-#         if log.get("custom_asset_maintenance_type") == "Reactive":
-#             asset_id = log.get("custom_asset")
-#         else:
-#             asset_id = am_to_asset_id.get(log.get("asset_name"))
-
-#         items_raw = frappe.get_all(
-#             "Stock Items For Asset",
-#             filters={"parent": log["name"], "parenttype": "Asset Maintenance Log"},
-#             fields=[
-#                 "name",
-#                 "item_code",
-#                 "qty",
-#                 "uom",
-#                 "stock_uom",
-#                 "conversion_factor",
-#                 "s_warehouse",
-#             ],
-#             order_by="idx asc",
-#         )
-
-#         logs.append(
-#             {
-#                 "name":                  log["name"],
-#                 "assetName":             log["asset_name"],
-#                 "assetId":               asset_id,            # ← correct for both paths
-#                 "itemCode":              log["item_code"],
-#                 "itemName":              log["item_name"],
-#                 "taskName":              log["task_name"],
-#                 "maintenanceStatus":     log["maintenance_status"],
-#                 "maintenanceType":       log["maintenance_type"],
-#                 "customMaintenanceType": log["custom_maintenance_types"],
-#                 "assetMaintenanceType":  log["custom_asset_maintenance_type"],
-#                 "assignTo":              log["custom_assign_to"],
-#                 "assignToName":          log["assign_to_name"],
-#                 "periodicity":           log["periodicity"],
-#                 "completionDate":        str(log["completion_date"]) if log.get("completion_date") else None,
-#                 "hasCertificate":        bool(log["has_certificate"]),
-#                 "description":           log["description"],
-#                 "docStatus":             log["docstatus"],
-#                 "createdAt":             str(log["creation"]) if log.get("creation") else None,
-#                 "updatedAt":             str(log["modified"]) if log.get("modified") else None,
-#                 "stockItems": [
-#                     {
-#                         "id":               item["name"],
-#                         "itemCode":         item["item_code"],
-#                         "qty":              item["qty"],
-#                         "uom":              item["uom"],
-#                         "stockUom":         item["stock_uom"],
-#                         "conversionFactor": item["conversion_factor"],
-#                         "warehouse":        item["s_warehouse"],
-#                     }
-#                     for item in items_raw
-#                 ],
-#             }
-#         )
-
-#     return {
-#         "success":    True,
-#         "customerId": customer_id,
-#         "status":     status,
-#         "count":      len(logs),
-#         "logs":       logs,
-#     }
-
-
-# def _log_fields():
-#     return [
-#         "name",
-#         "asset_name",
-#         "item_code",
-#         "item_name",
-#         "task_name",
-#         "maintenance_status",
-#         "maintenance_type",
-#         "custom_maintenance_types",
-#         "custom_asset",
-#         "custom_asset_maintenance_type",
-#         "custom_assign_to",
-#         "assign_to_name",
-#         "periodicity",
-#         "completion_date",
-#         "has_certificate",
-#         "description",
-#         "docstatus",
-#         "creation",
-#         "modified",
-#     ]
-
-
-# def _empty_response(customer_id, status):
-#     return {
-#         "success":    True,
-#         "customerId": customer_id,
-#         "status":     status,
-#         "count":      0,
-#         "logs":       [],
-#     }
 
 
 import frappe
@@ -1248,3 +735,139 @@ def _empty_response(customer_id, status, limit_start, limit_end):
             "hasPrevPage": False,
         },
     }
+
+@frappe.whitelist(allow_guest=False)
+def get_maintenance_log_details(log_id):
+    try:
+        # ── STEP 1: Identify user from Bearer token ────────────────────────────
+        current_user = frappe.session.user
+
+        if not current_user or current_user == "Guest":
+            return Response(
+                json.dumps({
+                    "status": "error",
+                    "message": "Unauthorized. Please provide a valid Bearer token.",
+                }),
+                status=401,
+                mimetype="application/json",
+            )
+
+        # ── STEP 2: Validate Log ID ────────────────────────────────────────────
+        if not frappe.db.exists("Asset Maintenance Log", log_id):
+            return Response(
+                json.dumps({
+                    "status": "error",
+                    "message": f"Asset Maintenance Log '{log_id}' not found",
+                }),
+                status=404,
+                mimetype="application/json",
+            )
+
+        # ── STEP 3: Fetch Asset Maintenance Log fields ─────────────────────────
+        log = frappe.db.get_value(
+            "Asset Maintenance Log",
+            log_id,
+            [
+                "name",
+                "asset_name",
+                "item_code",
+                "item_name",
+                "task_name",
+                "maintenance_status",
+                "maintenance_type",
+                "custom_maintenance_types",
+                "custom_asset_maintenance_type",
+                "custom_asset",
+                "custom_assign_to",
+                "assign_to_name",
+                "periodicity",
+                "completion_date",
+            ],
+            as_dict=True,
+        )
+
+        # ── STEP 4: Build response based on Reactive vs Planned ───────────────
+        log_type = log.get("custom_asset_maintenance_type")
+
+        if log_type == "Reactive":
+            response_data = {
+                "name":                         log.get("name"),
+                "asset_name":                   log.get("custom_asset") or "",
+                "item_code":                    log.get("item_code"),
+                "item_name":                    log.get("item_name"),
+                "task_name":                    log.get("task_name"),
+                "maintenance_status":           log.get("maintenance_status"),
+                "maintenance_category":         log.get("custom_maintenance_types") or "",
+                "custom_asset_maintenance_type": log_type,
+                "assign_to":                    log.get("custom_assign_to") or "",
+                "periodicity":                  log.get("periodicity"),
+                "completion_date":              log.get("completion_date"),
+            }
+
+        else:  # Planned
+            response_data = {
+                "name":                         log.get("name"),
+                "asset_name":                   log.get("asset_name") or "",
+                "item_code":                    log.get("item_code"),
+                "item_name":                    log.get("item_name"),
+                "task_name":                    log.get("task_name"),
+                "maintenance_status":           log.get("maintenance_status"),
+                "maintenance_category":         log.get("maintenance_type") or "",
+                "custom_asset_maintenance_type": log_type,
+                "assign_to":                    log.get("assign_to_name") or "",
+                "periodicity":                  log.get("periodicity"),
+                "completion_date":              log.get("completion_date"),
+            }
+
+        # ── STEP 5: Fetch Stock Items (custom_items child table) ───────────────
+        stock_items = frappe.get_all(
+            "Stock Items For Asset",
+            filters={"parent": log_id},
+            fields=[
+                "name",
+                "item_code",
+                "qty",
+                "uom",
+                "stock_uom",
+                "conversion_factor",
+                "s_warehouse",
+            ],
+        )
+        response_data["custom_items"] = stock_items
+
+        # ── STEP 6: Return response ────────────────────────────────────────────
+        return Response(
+            json.dumps(
+                {
+                    "status": "success",
+                    "data": response_data,
+                },
+                default=str
+            ),
+            status=200,
+            mimetype="application/json",
+        )
+
+    except frappe.PermissionError:
+        return Response(
+            json.dumps({
+                "status": "error",
+                "message": "You do not have permission to access this resource",
+            }),
+            status=403,
+            mimetype="application/json",
+        )
+
+    except Exception as e:
+        frappe.log_error(
+            title="get_maintenance_log_details error",
+            message=frappe.get_traceback()
+        )
+        return Response(
+            json.dumps({
+                "status": "error",
+                "message": str(e),
+            }),
+            status=500,
+            mimetype="application/json",
+        )
