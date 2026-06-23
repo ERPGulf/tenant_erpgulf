@@ -277,6 +277,7 @@ override_doctype_class = {
 doctype_js = {
     "Asset": "public/js/asset.js",
     "Asset Maintenance Log":"public/js/asset_maintenance_log.js",
-    "Stock Entry":"public/js/stock_entry.js"
+    "Stock Entry":"public/js/stock_entry.js",
+    "Maintenance Request":"public/js/maintenance_request.js"
 
 }

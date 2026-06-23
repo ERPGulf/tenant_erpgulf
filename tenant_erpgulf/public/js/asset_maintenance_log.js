@@ -6,11 +6,34 @@
 //         apply_reactive_logic(frm);
 //         set_quotation_filter(frm);
 
-//         // ── Create Quotation button — only on submitted docs ──
+//         // ── Only on submitted docs ──
 //         if (frm.doc.docstatus === 1) {
+
+//             // ── Create Quotation button ──
 //             frm.add_custom_button(__('Quotation'), function() {
 //                 create_quotation_from_maintenance(frm);
 //             }, __('Create'));
+
+//             // ── View Stock Entry button ──
+//             frappe.db.get_value(
+//                 'Stock Entry',
+//                 {
+//                     custom_asset_maintenance_log: frm.doc.name,
+//                     docstatus: 1
+//                 },
+//                 'name',
+//                 function(r) {
+//                     if (r && r.name) {
+//                         frm.add_custom_button(
+//                             __('Stock Entry'),
+//                             function() {
+//                                 frappe.set_route('Form', 'Stock Entry', r.name);
+//                             },
+//                             __('View')
+//                         ).addClass('btn-primary');
+//                     }
+//                 }
+//             );
 //         }
 //     },
 
@@ -31,7 +54,6 @@
 //         frm.set_value('periodicity', '');
 //         frm.set_value('custom_assign_to', '');
 
-//         // Only clear if fields exist
 //         if (frm.fields_dict['custom_quotation']) {
 //             frm.set_value('custom_quotation', '');
 //         }
@@ -49,7 +71,6 @@
 //                 if (value) {
 //                     frm.set_value('asset_name', value.asset_name);
 
-//                     // Planned: asset_name -> Asset.location -> Location.custom_customer
 //                     frappe.db.get_value('Asset', value.asset_name, 'location', function(asset_val) {
 //                         if (asset_val && asset_val.location) {
 //                             fetch_customer_from_location(frm, asset_val.location);
@@ -70,7 +91,6 @@
 //                     frm.set_value('item_code', value.item_code);
 //                     frm.refresh_fields(['asset_name', 'item_name', 'item_code']);
 
-//                     // Reactive: Asset.location -> Location.custom_customer
 //                     if (value.location) {
 //                         fetch_customer_from_location(frm, value.location);
 //                     }
@@ -79,7 +99,6 @@
 //         }
 //     },
 
-//     // ── When Default Warehouse is selected ──
 //     custom_default_warehouse: function(frm) {
 //         if (!frm.doc.custom_default_warehouse) return;
 
@@ -107,6 +126,7 @@
 // // ── Child table: Stock Items For Asset ──
 // frappe.ui.form.on('Stock Items For Asset', {
 
+//     // ── Auto-set warehouse when row is added ──
 //     custom_items_add: function(frm, cdt, cdn) {
 //         if (!frm.doc.custom_default_warehouse) return;
 
@@ -115,6 +135,77 @@
 //             cdn,
 //             's_warehouse',
 //             frm.doc.custom_default_warehouse
+//         );
+//     },
+
+//     // ── When item_code is selected: fetch stock_uom + conversion_factor ──
+//     item_code: function(frm, cdt, cdn) {
+//         const row = locals[cdt][cdn];
+//         if (!row.item_code) return;
+
+//         frappe.db.get_value(
+//             'Item',
+//             row.item_code,
+//             ['stock_uom'],
+//             function(item) {
+//                 if (!item || !item.stock_uom) return;
+
+//                 const stock_uom = item.stock_uom;
+
+//                 // Set both uom and stock_uom from Item.stock_uom
+//                 frappe.model.set_value(cdt, cdn, 'stock_uom', stock_uom);
+//                 frappe.model.set_value(cdt, cdn, 'uom', stock_uom);
+
+//                 // Now fetch conversion_factor from Item UOM table
+//                 // where uom matches stock_uom (conversion_factor is usually 1 for stock_uom,
+//                 // but we fetch it properly from the UOM Conversion table)
+//                 frappe.db.get_value(
+//                     'UOM Conversion Detail',
+//                     {
+//                         parent: row.item_code,
+//                         uom: stock_uom
+//                     },
+//                     'conversion_factor',
+//                     function(uom_row) {
+//                         if (uom_row && uom_row.conversion_factor) {
+//                             frappe.model.set_value(
+//                                 cdt, cdn,
+//                                 'conversion_factor',
+//                                 uom_row.conversion_factor
+//                             );
+//                         } else {
+//                             // stock_uom always has conversion_factor = 1
+//                             frappe.model.set_value(cdt, cdn, 'conversion_factor', 1);
+//                         }
+//                     }
+//                 );
+//             }
+//         );
+//     },
+
+//     // ── When uom is manually changed: re-fetch conversion_factor ──
+//     uom: function(frm, cdt, cdn) {
+//         const row = locals[cdt][cdn];
+//         if (!row.item_code || !row.uom) return;
+
+//         frappe.db.get_value(
+//             'UOM Conversion Detail',
+//             {
+//                 parent: row.item_code,
+//                 uom: row.uom
+//             },
+//             'conversion_factor',
+//             function(uom_row) {
+//                 if (uom_row && uom_row.conversion_factor) {
+//                     frappe.model.set_value(
+//                         cdt, cdn,
+//                         'conversion_factor',
+//                         uom_row.conversion_factor
+//                     );
+//                 } else {
+//                     frappe.model.set_value(cdt, cdn, 'conversion_factor', 1);
+//                 }
+//             }
 //         );
 //     }
 
@@ -158,7 +249,6 @@
 //     frappe.db.get_value('Location', location, 'custom_customer', function(loc_val) {
 //         if (loc_val && loc_val.custom_customer) {
 
-//             // Only set if field exists
 //             if (frm.fields_dict['custom_customer']) {
 //                 frm.set_value('custom_customer', loc_val.custom_customer);
 //                 set_quotation_filter(frm);
@@ -184,7 +274,6 @@
 
 // function do_create_quotation(frm) {
 
-//     // Determine asset based on type
 //     const asset = frm.doc.custom_asset_maintenance_type === 'Reactive'
 //         ? frm.doc.custom_asset
 //         : frm.doc.asset_name;
@@ -194,14 +283,12 @@
 //         return;
 //     }
 
-//     // Step 1: Get location from Asset
 //     frappe.db.get_value('Asset', asset, 'location', function(asset_val) {
 //         if (!asset_val || !asset_val.location) {
 //             frappe.msgprint(__('No Location found on Asset. Cannot fetch Customer.'));
 //             return;
 //         }
 
-//         // Step 2: Get custom_customer from Location
 //         frappe.db.get_value('Location', asset_val.location, 'custom_customer', function(loc_val) {
 //             if (!loc_val || !loc_val.custom_customer) {
 //                 frappe.msgprint(__('No Customer found on Location. Cannot create Quotation.'));
@@ -210,7 +297,6 @@
 
 //             const customer = loc_val.custom_customer;
 
-//             // Step 3: Build items from custom_items
 //             const items = (frm.doc.custom_items || [])
 //                 .filter(row => row.item_code)
 //                 .map(row => ({
@@ -219,7 +305,6 @@
 //                     uom: row.uom || row.stock_uom
 //                 }));
 
-//             // Step 4: Prefill and open new Quotation form (no save)
 //             frappe.route_options = {
 //                 quotation_to: 'Customer',
 //                 party_name: customer
@@ -229,7 +314,6 @@
 //                 quotation_to: 'Customer',
 //                 party_name: customer
 //             }, function(new_doc) {
-//                 // Step 5: Fill items
 //                 if (items.length) {
 //                     new_doc.items = [];
 //                     items.forEach(function(item) {
@@ -464,6 +548,13 @@ frappe.ui.form.on('Asset Maintenance Log', {
         }
     },
 
+    // ── Auto-set status when Quotation is linked ─────────────────
+    custom_quotation: function(frm) {
+        if (frm.doc.custom_quotation) {
+            frm.set_value('custom_quotation_status', 'Quotation issued');
+        }
+    },
+
     custom_default_warehouse: function(frm) {
         if (!frm.doc.custom_default_warehouse) return;
 
@@ -491,7 +582,6 @@ frappe.ui.form.on('Asset Maintenance Log', {
 // ── Child table: Stock Items For Asset ──
 frappe.ui.form.on('Stock Items For Asset', {
 
-    // ── Auto-set warehouse when row is added ──
     custom_items_add: function(frm, cdt, cdn) {
         if (!frm.doc.custom_default_warehouse) return;
 
@@ -503,7 +593,6 @@ frappe.ui.form.on('Stock Items For Asset', {
         );
     },
 
-    // ── When item_code is selected: fetch stock_uom + conversion_factor ──
     item_code: function(frm, cdt, cdn) {
         const row = locals[cdt][cdn];
         if (!row.item_code) return;
@@ -517,59 +606,39 @@ frappe.ui.form.on('Stock Items For Asset', {
 
                 const stock_uom = item.stock_uom;
 
-                // Set both uom and stock_uom from Item.stock_uom
                 frappe.model.set_value(cdt, cdn, 'stock_uom', stock_uom);
                 frappe.model.set_value(cdt, cdn, 'uom', stock_uom);
 
-                // Now fetch conversion_factor from Item UOM table
-                // where uom matches stock_uom (conversion_factor is usually 1 for stock_uom,
-                // but we fetch it properly from the UOM Conversion table)
                 frappe.db.get_value(
                     'UOM Conversion Detail',
-                    {
-                        parent: row.item_code,
-                        uom: stock_uom
-                    },
+                    { parent: row.item_code, uom: stock_uom },
                     'conversion_factor',
                     function(uom_row) {
-                        if (uom_row && uom_row.conversion_factor) {
-                            frappe.model.set_value(
-                                cdt, cdn,
-                                'conversion_factor',
-                                uom_row.conversion_factor
-                            );
-                        } else {
-                            // stock_uom always has conversion_factor = 1
-                            frappe.model.set_value(cdt, cdn, 'conversion_factor', 1);
-                        }
+                        frappe.model.set_value(
+                            cdt, cdn,
+                            'conversion_factor',
+                            (uom_row && uom_row.conversion_factor) ? uom_row.conversion_factor : 1
+                        );
                     }
                 );
             }
         );
     },
 
-    // ── When uom is manually changed: re-fetch conversion_factor ──
     uom: function(frm, cdt, cdn) {
         const row = locals[cdt][cdn];
         if (!row.item_code || !row.uom) return;
 
         frappe.db.get_value(
             'UOM Conversion Detail',
-            {
-                parent: row.item_code,
-                uom: row.uom
-            },
+            { parent: row.item_code, uom: row.uom },
             'conversion_factor',
             function(uom_row) {
-                if (uom_row && uom_row.conversion_factor) {
-                    frappe.model.set_value(
-                        cdt, cdn,
-                        'conversion_factor',
-                        uom_row.conversion_factor
-                    );
-                } else {
-                    frappe.model.set_value(cdt, cdn, 'conversion_factor', 1);
-                }
+                frappe.model.set_value(
+                    cdt, cdn,
+                    'conversion_factor',
+                    (uom_row && uom_row.conversion_factor) ? uom_row.conversion_factor : 1
+                );
             }
         );
     }
@@ -580,11 +649,7 @@ frappe.ui.form.on('Stock Items For Asset', {
 // ── Filter: only stock items in child table ──
 function set_maintenance_stock_filter(frm) {
     frm.set_query('item_code', 'custom_items', function() {
-        return {
-            filters: {
-                'is_stock_item': 1
-            }
-        };
+        return { filters: { 'is_stock_item': 1 } };
     });
 }
 
@@ -670,26 +735,51 @@ function do_create_quotation(frm) {
                     uom: row.uom || row.stock_uom
                 }));
 
-            frappe.route_options = {
+            // ── Build the Quotation doc object ──────────────────────────
+            const quotation_doc = {
+                doctype: 'Quotation',
                 quotation_to: 'Customer',
-                party_name: customer
+                party_name: customer,
+                items: items.map(item => ({
+                    doctype: 'Quotation Item',
+                    item_code: item.item_code,
+                    qty: item.qty,
+                    uom: item.uom
+                }))
             };
 
-            frappe.new_doc('Quotation', {
-                quotation_to: 'Customer',
-                party_name: customer
-            }, function(new_doc) {
-                if (items.length) {
-                    new_doc.items = [];
-                    items.forEach(function(item) {
-                        const row = frappe.model.add_child(new_doc, 'Quotation Item', 'items');
-                        row.item_code = item.item_code;
-                        row.qty = item.qty;
-                        row.uom = item.uom;
-                    });
-                }
+            // ── Save the Quotation via API ───────────────────────────────
+            frappe.call({
+                method: 'frappe.client.insert',
+                args: { doc: quotation_doc },
+                freeze: true,
+                freeze_message: __('Creating Quotation...'),
+                callback: function(r) {
+                    if (r.exc || !r.message) return;
 
-                frappe.set_route('Form', 'Quotation', new_doc.name);
+                    const quotation_id = r.message.name;
+
+                    // ── Store Quotation ID + status back in Asset Maintenance Log ──
+                    frappe.db.set_value(
+                        'Asset Maintenance Log',
+                        frm.doc.name,
+                        {
+                            'custom_quotation':        quotation_id,
+                            'custom_quotation_status': 'Quotation issued'
+                        },
+                        function() {
+                            frm.reload_doc();
+
+                            frappe.show_alert({
+                                message: __('Quotation {0} created and linked', [quotation_id]),
+                                indicator: 'green'
+                            }, 5);
+
+                            // ── Open the new Quotation form ──
+                            frappe.set_route('Form', 'Quotation', quotation_id);
+                        }
+                    );
+                }
             });
         });
     });
@@ -700,10 +790,7 @@ function do_create_quotation(frm) {
 function apply_reactive_logic(frm) {
     const is_reactive = frm.doc.custom_asset_maintenance_type === 'Reactive';
 
-    const reactive_editable_fields = [
-        'task_name',
-        'periodicity'
-    ];
+    const reactive_editable_fields = ['task_name', 'periodicity'];
 
     if (is_reactive) {
         frm.set_df_property('asset_maintenance', 'hidden', 1);

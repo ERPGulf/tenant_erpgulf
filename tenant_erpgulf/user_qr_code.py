@@ -374,7 +374,11 @@ def create_maintenance_request(
     doc.description      = description
     doc.phone_number     = phone_number
 
+    # doc.insert(ignore_permissions=False)
+    # frappe.db.commit()
     doc.insert(ignore_permissions=False)
+    doc.date_of_submit = frappe.utils.today()
+    doc.submit()
     frappe.db.commit()
 
     # ── Collect all uploaded files from multipart form-data ───────
