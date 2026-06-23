@@ -29,7 +29,7 @@ http:
         value: adc
       - name: description
         type: text
-        value: abc
+        value: Electrical portable appliance testing
       - name: phone_number
         type: text
         value: "8281693215"
@@ -42,7 +42,7 @@ http:
           - /Users/malavikag/Downloads/tenant erpgulf.postman_collection.json
   auth:
     type: bearer
-    token: ""
+    token: vGiKSGhZeFfZ0bG6CigKDxJdDf10qR
 
 settings:
   encodeUrl: true

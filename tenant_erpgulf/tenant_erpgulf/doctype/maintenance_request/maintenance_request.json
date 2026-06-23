@@ -19,7 +19,8 @@
   "phone_number",
   "status",
   "maintenance_log",
-  "date_of_submit"
+  "date_of_submit",
+  "custom_status_changed_date"
  ],
  "fields": [
   {
@@ -110,13 +111,20 @@
    "fieldname": "date_of_submit",
    "fieldtype": "Date",
    "label": "Date Of Submit"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "custom_status_changed_date",
+   "fieldtype": "Date",
+   "hidden": 1,
+   "label": "custom_status_changed_date"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-22 10:57:15.413196",
+ "modified": "2026-06-23 10:59:32.108208",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Maintenance Request",

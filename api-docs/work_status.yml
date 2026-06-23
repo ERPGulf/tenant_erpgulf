@@ -1,0 +1,23 @@
+info:
+  name: work_status
+  type: http
+  seq: 14
+
+http:
+  method: GET
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.work_status.get_work_status
+  body:
+    type: multipart-form
+    data:
+      - name: request_id
+        type: text
+        value: dv59392a1p
+  auth:
+    type: bearer
+    token: 0tUTe0cBcQdZHw8UopOyKub1hDkPEo
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

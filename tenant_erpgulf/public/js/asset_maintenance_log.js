@@ -99,6 +99,13 @@
 //         }
 //     },
 
+//     // ── Auto-set status when Quotation is linked ─────────────────
+//     custom_quotation: function(frm) {
+//         if (frm.doc.custom_quotation) {
+//             frm.set_value('custom_quotation_status', 'Quotation issued');
+//         }
+//     },
+
 //     custom_default_warehouse: function(frm) {
 //         if (!frm.doc.custom_default_warehouse) return;
 
@@ -126,7 +133,6 @@
 // // ── Child table: Stock Items For Asset ──
 // frappe.ui.form.on('Stock Items For Asset', {
 
-//     // ── Auto-set warehouse when row is added ──
 //     custom_items_add: function(frm, cdt, cdn) {
 //         if (!frm.doc.custom_default_warehouse) return;
 
@@ -138,7 +144,6 @@
 //         );
 //     },
 
-//     // ── When item_code is selected: fetch stock_uom + conversion_factor ──
 //     item_code: function(frm, cdt, cdn) {
 //         const row = locals[cdt][cdn];
 //         if (!row.item_code) return;
@@ -152,59 +157,39 @@
 
 //                 const stock_uom = item.stock_uom;
 
-//                 // Set both uom and stock_uom from Item.stock_uom
 //                 frappe.model.set_value(cdt, cdn, 'stock_uom', stock_uom);
 //                 frappe.model.set_value(cdt, cdn, 'uom', stock_uom);
 
-//                 // Now fetch conversion_factor from Item UOM table
-//                 // where uom matches stock_uom (conversion_factor is usually 1 for stock_uom,
-//                 // but we fetch it properly from the UOM Conversion table)
 //                 frappe.db.get_value(
 //                     'UOM Conversion Detail',
-//                     {
-//                         parent: row.item_code,
-//                         uom: stock_uom
-//                     },
+//                     { parent: row.item_code, uom: stock_uom },
 //                     'conversion_factor',
 //                     function(uom_row) {
-//                         if (uom_row && uom_row.conversion_factor) {
-//                             frappe.model.set_value(
-//                                 cdt, cdn,
-//                                 'conversion_factor',
-//                                 uom_row.conversion_factor
-//                             );
-//                         } else {
-//                             // stock_uom always has conversion_factor = 1
-//                             frappe.model.set_value(cdt, cdn, 'conversion_factor', 1);
-//                         }
+//                         frappe.model.set_value(
+//                             cdt, cdn,
+//                             'conversion_factor',
+//                             (uom_row && uom_row.conversion_factor) ? uom_row.conversion_factor : 1
+//                         );
 //                     }
 //                 );
 //             }
 //         );
 //     },
 
-//     // ── When uom is manually changed: re-fetch conversion_factor ──
 //     uom: function(frm, cdt, cdn) {
 //         const row = locals[cdt][cdn];
 //         if (!row.item_code || !row.uom) return;
 
 //         frappe.db.get_value(
 //             'UOM Conversion Detail',
-//             {
-//                 parent: row.item_code,
-//                 uom: row.uom
-//             },
+//             { parent: row.item_code, uom: row.uom },
 //             'conversion_factor',
 //             function(uom_row) {
-//                 if (uom_row && uom_row.conversion_factor) {
-//                     frappe.model.set_value(
-//                         cdt, cdn,
-//                         'conversion_factor',
-//                         uom_row.conversion_factor
-//                     );
-//                 } else {
-//                     frappe.model.set_value(cdt, cdn, 'conversion_factor', 1);
-//                 }
+//                 frappe.model.set_value(
+//                     cdt, cdn,
+//                     'conversion_factor',
+//                     (uom_row && uom_row.conversion_factor) ? uom_row.conversion_factor : 1
+//                 );
 //             }
 //         );
 //     }
@@ -215,11 +200,7 @@
 // // ── Filter: only stock items in child table ──
 // function set_maintenance_stock_filter(frm) {
 //     frm.set_query('item_code', 'custom_items', function() {
-//         return {
-//             filters: {
-//                 'is_stock_item': 1
-//             }
-//         };
+//         return { filters: { 'is_stock_item': 1 } };
 //     });
 // }
 
@@ -305,26 +286,51 @@
 //                     uom: row.uom || row.stock_uom
 //                 }));
 
-//             frappe.route_options = {
+//             // ── Build the Quotation doc object ──────────────────────────
+//             const quotation_doc = {
+//                 doctype: 'Quotation',
 //                 quotation_to: 'Customer',
-//                 party_name: customer
+//                 party_name: customer,
+//                 items: items.map(item => ({
+//                     doctype: 'Quotation Item',
+//                     item_code: item.item_code,
+//                     qty: item.qty,
+//                     uom: item.uom
+//                 }))
 //             };
 
-//             frappe.new_doc('Quotation', {
-//                 quotation_to: 'Customer',
-//                 party_name: customer
-//             }, function(new_doc) {
-//                 if (items.length) {
-//                     new_doc.items = [];
-//                     items.forEach(function(item) {
-//                         const row = frappe.model.add_child(new_doc, 'Quotation Item', 'items');
-//                         row.item_code = item.item_code;
-//                         row.qty = item.qty;
-//                         row.uom = item.uom;
-//                     });
-//                 }
+//             // ── Save the Quotation via API ───────────────────────────────
+//             frappe.call({
+//                 method: 'frappe.client.insert',
+//                 args: { doc: quotation_doc },
+//                 freeze: true,
+//                 freeze_message: __('Creating Quotation...'),
+//                 callback: function(r) {
+//                     if (r.exc || !r.message) return;
 
-//                 frappe.set_route('Form', 'Quotation', new_doc.name);
+//                     const quotation_id = r.message.name;
+
+//                     // ── Store Quotation ID + status back in Asset Maintenance Log ──
+//                     frappe.db.set_value(
+//                         'Asset Maintenance Log',
+//                         frm.doc.name,
+//                         {
+//                             'custom_quotation':        quotation_id,
+//                             'custom_quotation_status': 'Quotation issued'
+//                         },
+//                         function() {
+//                             frm.reload_doc();
+
+//                             frappe.show_alert({
+//                                 message: __('Quotation {0} created and linked', [quotation_id]),
+//                                 indicator: 'green'
+//                             }, 5);
+
+//                             // ── Open the new Quotation form ──
+//                             frappe.set_route('Form', 'Quotation', quotation_id);
+//                         }
+//                     );
+//                 }
 //             });
 //         });
 //     });
@@ -335,10 +341,7 @@
 // function apply_reactive_logic(frm) {
 //     const is_reactive = frm.doc.custom_asset_maintenance_type === 'Reactive';
 
-//     const reactive_editable_fields = [
-//         'task_name',
-//         'periodicity'
-//     ];
+//     const reactive_editable_fields = ['task_name', 'periodicity'];
 
 //     if (is_reactive) {
 //         frm.set_df_property('asset_maintenance', 'hidden', 1);
@@ -455,13 +458,20 @@ frappe.ui.form.on('Asset Maintenance Log', {
         apply_reactive_logic(frm);
         set_quotation_filter(frm);
 
-        // ── Only on submitted docs ──
-        if (frm.doc.docstatus === 1) {
-
-            // ── Create Quotation button ──
+        // ── Create Quotation button ──
+        // Show only if: doc is saved (not new), not submitted, and no quotation linked yet
+        if (
+            !frm.is_new() &&
+            frm.doc.docstatus === 0 &&
+            !frm.doc.custom_quotation
+        ) {
             frm.add_custom_button(__('Quotation'), function() {
                 create_quotation_from_maintenance(frm);
             }, __('Create'));
+        }
+
+        // ── Only on submitted docs ──
+        if (frm.doc.docstatus === 1) {
 
             // ── View Stock Entry button ──
             frappe.db.get_value(
