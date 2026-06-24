@@ -1,0 +1,26 @@
+info:
+  name: quotation_aprov
+  type: http
+  seq: 15
+
+http:
+  method: POST
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.quotation_pay.update_quotation_approval
+  body:
+    type: multipart-form
+    data:
+      - name: quotation_id
+        type: text
+        value: SAL-QTN-2026-00022
+      - name: is_approved
+        type: text
+        value: "true"
+  auth:
+    type: bearer
+    token: g7tgtrjiEiQDXduAsmYcuy54wn6kOm
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
