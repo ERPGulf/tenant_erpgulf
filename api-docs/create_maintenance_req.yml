@@ -35,14 +35,14 @@ http:
         value: "8281693215"
       - name: customer
         type: text
-        value: test customer
+        value: customer test
       - name: attachment_ids
         type: file
         value:
           - /Users/malavikag/Downloads/tenant erpgulf.postman_collection.json
   auth:
     type: bearer
-    token: vGiKSGhZeFfZ0bG6CigKDxJdDf10qR
+    token: SYCzgNOrqIpQue6xYcdma0EaTwEnJZ
 
 settings:
   encodeUrl: true

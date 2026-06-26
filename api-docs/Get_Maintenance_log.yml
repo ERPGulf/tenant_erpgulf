@@ -11,19 +11,19 @@ http:
     data:
       - name: customer_id
         type: text
-        value: test customer
+        value: customer test
       - name: status
         type: text
         value: All
       - name: limit_start
         type: text
-        value: "4"
+        value: "0"
       - name: limit_end
         type: text
         value: "6"
   auth:
     type: bearer
-    token: ""
+    token: sUGTxziHiN076iNit8E5xCIdSrC2tH
 
 settings:
   encodeUrl: true

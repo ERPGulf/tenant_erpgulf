@@ -487,6 +487,394 @@ def create_maintenance_request(
     }
 
 
+# import frappe
+# from frappe import _
+
+
+# @frappe.whitelist(allow_guest=False)
+# def get_asset_maintenance_logs(
+#     customer_id,
+#     status      = "All",
+#     limit_start : int = 0,
+#     limit_end   : int = 20,
+# ):
+#     """
+#     Returns paginated Asset Maintenance Logs for a given customer.
+
+#     Args:
+#         customer_id  : Customer ID (required)
+#         status       : "All" | "Open"  (default "All")
+#         limit_start  : Zero-based offset — first record to return (default 0)
+#         limit_end    : Last record index (exclusive), i.e. page size = limit_end - limit_start
+#                        e.g. limit_start=0, limit_end=20  → page 1 (records 1-20)
+#                             limit_start=20, limit_end=40 → page 2 (records 21-40)
+
+#     Response includes:
+#         pagination.totalCount   : total matching records (before slicing)
+#         pagination.limit_start  : echoed back
+#         pagination.limit_end    : echoed back
+#         pagination.pageSize     : limit_end - limit_start
+#         pagination.totalPages   : ceil(totalCount / pageSize)
+#         pagination.currentPage  : 1-based current page number
+#         pagination.hasNextPage  : bool
+#         pagination.hasPrevPage  : bool
+#     """
+
+#     # ── Cast to int (whitelist passes everything as string) ───────
+#     limit_start = int(limit_start)
+#     limit_end   = int(limit_end)
+#     page_size   = limit_end - limit_start
+
+#     if page_size <= 0:
+#         frappe.throw(_("limit_end must be greater than limit_start"), frappe.ValidationError)
+
+#     if not customer_id:
+#         frappe.throw(_("customer_id is required"), frappe.MandatoryError)
+
+#     # ── Step 1: Get all Location names for this customer ──────────
+#     locations = frappe.get_all(
+#         "Location",
+#         filters={"custom_customer": customer_id},
+#         fields=["name"],
+#     )
+#     location_names = [l["name"] for l in locations]
+
+#     if not location_names:
+#         return _empty_response(customer_id, status, limit_start, limit_end)
+
+#     # ── Step 2: Get all Asset IDs in those locations ──────────────
+#     all_assets = frappe.get_all(
+#         "Asset",
+#         filters={"location": ["in", location_names]},
+#         fields=["name"],
+#     )
+#     asset_ids = [a["name"] for a in all_assets]
+
+#     if not asset_ids:
+#         return _empty_response(customer_id, status, limit_start, limit_end)
+
+#     # ─────────────────────────────────────────────────────────────
+#     # PATH A — Reactive
+#     # assetId = custom_asset (directly available)
+#     # ─────────────────────────────────────────────────────────────
+#     reactive_filters = {
+#         "docstatus": ["in", [0, 1]],
+#         "custom_asset_maintenance_type": "Reactive",
+#         "custom_asset": ["in", asset_ids],
+#     }
+#     if status.lower() == "open":
+#         reactive_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
+
+#     reactive_logs = frappe.get_all(
+#         "Asset Maintenance Log",
+#         filters=reactive_filters,
+#         fields=_log_fields(),
+#         order_by="creation desc",
+#     )
+
+#     # ─────────────────────────────────────────────────────────────
+#     # PATH B — Planned
+#     # assetId = Asset Maintenance.asset_name (Asset ID stored there)
+#     # ─────────────────────────────────────────────────────────────
+#     am_records = frappe.get_all(
+#         "Asset Maintenance",
+#         filters={"asset_name": ["in", asset_ids]},
+#         fields=["name", "asset_name"],
+#     )
+#     am_to_asset_id = {am["name"]: am["asset_name"] for am in am_records}
+#     am_names = list(am_to_asset_id.keys())
+
+#     planned_logs = []
+#     if am_names:
+#         planned_filters = {
+#             "docstatus": ["in", [0, 1]],
+#             "custom_asset_maintenance_type": "Planned",
+#             "asset_name": ["in", am_names],
+#         }
+#         if status.lower() == "open":
+#             planned_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
+
+#         planned_logs = frappe.get_all(
+#             "Asset Maintenance Log",
+#             filters=planned_filters,
+#             fields=_log_fields(),
+#             order_by="creation desc",
+#         )
+
+#     # ── Merge + deduplicate ───────────────────────────────────────
+#     seen = set()
+#     combined_logs = []
+#     for log in reactive_logs + planned_logs:
+#         if log["name"] not in seen:
+#             seen.add(log["name"])
+#             combined_logs.append(log)
+
+#     combined_logs.sort(key=lambda x: str(x.get("creation") or ""), reverse=True)
+
+#     # ── Pagination ────────────────────────────────────────────────
+#     total_count   = len(combined_logs)
+#     paged_logs    = combined_logs[limit_start:limit_end]   # slice the full list
+
+#     import math
+#     total_pages   = math.ceil(total_count / page_size) if page_size else 1
+#     current_page  = (limit_start // page_size) + 1 if page_size else 1
+
+#     # ── Build final response ──────────────────────────────────────
+#     logs = []
+#     for log in paged_logs:
+#         if log.get("custom_asset_maintenance_type") == "Reactive":
+#             asset_id = log.get("custom_asset")
+#         else:
+#             asset_id = am_to_asset_id.get(log.get("asset_name"))
+
+#         items_raw = frappe.get_all(
+#             "Stock Items For Asset",
+#             filters={"parent": log["name"], "parenttype": "Asset Maintenance Log"},
+#             fields=[
+#                 "name",
+#                 "item_code",
+#                 "qty",
+#                 "uom",
+#                 "stock_uom",
+#                 "conversion_factor",
+#                 "s_warehouse",
+#             ],
+#             order_by="idx asc",
+#         )
+
+#         logs.append(
+#             {
+#                 "name":                  log["name"],
+#                 "assetName":             log["asset_name"],
+#                 "assetId":               asset_id,
+#                 "itemCode":              log["item_code"],
+#                 "itemName":              log["item_name"],
+#                 "taskName":              log["task_name"],
+#                 "maintenanceStatus":     log["maintenance_status"],
+#                 "maintenanceType":       log["maintenance_type"],
+#                 "customMaintenanceType": log["custom_maintenance_types"],
+#                 "assetMaintenanceType":  log["custom_asset_maintenance_type"],
+#                 "assignTo":              log["custom_assign_to"],
+#                 "assignToName":          log["assign_to_name"],
+#                 "periodicity":           log["periodicity"],
+#                 "completionDate":        str(log["completion_date"]) if log.get("completion_date") else None,
+#                 "hasCertificate":        bool(log["has_certificate"]),
+#                 "description":           log["description"],
+#                 "docStatus":             log["docstatus"],
+#                 "createdAt":             str(log["creation"]) if log.get("creation") else None,
+#                 "updatedAt":             str(log["modified"]) if log.get("modified") else None,
+#                 "stockItems": [
+#                     {
+#                         "id":               item["name"],
+#                         "itemCode":         item["item_code"],
+#                         "qty":              item["qty"],
+#                         "uom":              item["uom"],
+#                         "stockUom":         item["stock_uom"],
+#                         "conversionFactor": item["conversion_factor"],
+#                         "warehouse":        item["s_warehouse"],
+#                     }
+#                     for item in items_raw
+#                 ],
+#             }
+#         )
+
+#     return {
+#         "success":    True,
+#         "customerId": customer_id,
+#         "status":     status,
+#         "count":      len(logs),           # records returned in THIS page
+#         "logs":       logs,
+#         "pagination": {
+#             "totalCount":  total_count,    # all matching records across all pages
+#             "limit_start": limit_start,
+#             "limit_end":   limit_end,
+#             "pageSize":    page_size,
+#             "totalPages":  total_pages,
+#             "currentPage": current_page,
+#             "hasNextPage": limit_end < total_count,
+#             "hasPrevPage": limit_start > 0,
+#         },
+#     }
+
+
+# def _log_fields():
+#     return [
+#         "name",
+#         "asset_name",
+#         "item_code",
+#         "item_name",
+#         "task_name",
+#         "maintenance_status",
+#         "maintenance_type",
+#         "custom_maintenance_types",
+#         "custom_asset",
+#         "custom_asset_maintenance_type",
+#         "custom_assign_to",
+#         "assign_to_name",
+#         "periodicity",
+#         "completion_date",
+#         "has_certificate",
+#         "description",
+#         "docstatus",
+#         "creation",
+#         "modified",
+#     ]
+
+
+# def _empty_response(customer_id, status, limit_start, limit_end):
+#     return {
+#         "success":    True,
+#         "customerId": customer_id,
+#         "status":     status,
+#         "count":      0,
+#         "logs":       [],
+#         "pagination": {
+#             "totalCount":  0,
+#             "limit_start": limit_start,
+#             "limit_end":   limit_end,
+#             "pageSize":    limit_end - limit_start,
+#             "totalPages":  0,
+#             "currentPage": 1,
+#             "hasNextPage": False,
+#             "hasPrevPage": False,
+#         },
+#     }
+
+# @frappe.whitelist(allow_guest=False)
+# def get_maintenance_log_details(log_id):
+#     try:
+#         # ── STEP 1: Identify user from Bearer token ────────────────────────────
+#         current_user = frappe.session.user
+
+#         if not current_user or current_user == "Guest":
+#             return Response(
+#                 json.dumps({
+#                     "status": "error",
+#                     "message": "Unauthorized. Please provide a valid Bearer token.",
+#                 }),
+#                 status=401,
+#                 mimetype="application/json",
+#             )
+
+#         # ── STEP 2: Validate Log ID ────────────────────────────────────────────
+#         if not frappe.db.exists("Asset Maintenance Log", log_id):
+#             return Response(
+#                 json.dumps({
+#                     "status": "error",
+#                     "message": f"Asset Maintenance Log '{log_id}' not found",
+#                 }),
+#                 status=404,
+#                 mimetype="application/json",
+#             )
+
+#         # ── STEP 3: Fetch Asset Maintenance Log fields ─────────────────────────
+#         log = frappe.db.get_value(
+#             "Asset Maintenance Log",
+#             log_id,
+#             [
+#                 "name",
+#                 "asset_name",
+#                 "item_code",
+#                 "item_name",
+#                 "task_name",
+#                 "maintenance_status",
+#                 "maintenance_type",
+#                 "custom_maintenance_types",
+#                 "custom_asset_maintenance_type",
+#                 "custom_asset",
+#                 "custom_assign_to",
+#                 "assign_to_name",
+#                 "periodicity",
+#                 "completion_date",
+#             ],
+#             as_dict=True,
+#         )
+
+#         # ── STEP 4: Build response based on Reactive vs Planned ───────────────
+#         log_type = log.get("custom_asset_maintenance_type")
+
+#         if log_type == "Reactive":
+#             response_data = {
+#                 "name":                         log.get("name"),
+#                 "asset_name":                   log.get("custom_asset") or "",
+#                 "item_code":                    log.get("item_code"),
+#                 "item_name":                    log.get("item_name"),
+#                 "task_name":                    log.get("task_name"),
+#                 "maintenance_status":           log.get("maintenance_status"),
+#                 "maintenance_category":         log.get("custom_maintenance_types") or "",
+#                 "custom_asset_maintenance_type": log_type,
+#                 "assign_to":                    log.get("custom_assign_to") or "",
+#                 "periodicity":                  log.get("periodicity"),
+#                 "completion_date":              log.get("completion_date"),
+#             }
+
+#         else:  # Planned
+#             response_data = {
+#                 "name":                         log.get("name"),
+#                 "asset_name":                   log.get("asset_name") or "",
+#                 "item_code":                    log.get("item_code"),
+#                 "item_name":                    log.get("item_name"),
+#                 "task_name":                    log.get("task_name"),
+#                 "maintenance_status":           log.get("maintenance_status"),
+#                 "maintenance_category":         log.get("maintenance_type") or "",
+#                 "custom_asset_maintenance_type": log_type,
+#                 "assign_to":                    log.get("assign_to_name") or "",
+#                 "periodicity":                  log.get("periodicity"),
+#                 "completion_date":              log.get("completion_date"),
+#             }
+
+#         # ── STEP 5: Fetch Stock Items (custom_items child table) ───────────────
+#         stock_items = frappe.get_all(
+#             "Stock Items For Asset",
+#             filters={"parent": log_id},
+#             fields=[
+#                 "name",
+#                 "item_code",
+#                 "qty",
+#                 "uom",
+#                 "stock_uom",
+#                 "conversion_factor",
+#                 "s_warehouse",
+#             ],
+#         )
+#         response_data["custom_items"] = stock_items
+
+#         # ── STEP 6: Return response ────────────────────────────────────────────
+#         return Response(
+#             json.dumps(
+#                 {
+#                     "status": "success",
+#                     "data": response_data,
+#                 },
+#                 default=str
+#             ),
+#             status=200,
+#             mimetype="application/json",
+#         )
+
+#     except frappe.PermissionError:
+#         return Response(
+#             json.dumps({
+#                 "status": "error",
+#                 "message": "You do not have permission to access this resource",
+#             }),
+#             status=403,
+#             mimetype="application/json",
+#         )
+
+#     except Exception as e:
+#         frappe.log_error(
+#             title="get_maintenance_log_details error",
+#             message=frappe.get_traceback()
+#         )
+#         return Response(
+#             json.dumps({
+#                 "status": "error",
+#                 "message": str(e),
+#             }),
+#             status=500,
+#             mimetype="application/json",
+#         )
 import frappe
 from frappe import _
 
@@ -613,11 +1001,21 @@ def get_asset_maintenance_logs(
 
     # ── Pagination ────────────────────────────────────────────────
     total_count   = len(combined_logs)
-    paged_logs    = combined_logs[limit_start:limit_end]   # slice the full list
+    paged_logs    = combined_logs[limit_start:limit_end]
 
     import math
     total_pages   = math.ceil(total_count / page_size) if page_size else 1
     current_page  = (limit_start // page_size) + 1 if page_size else 1
+
+    # ── Pre-fetch Maintenance Request IDs for all paged logs in one query ──
+    paged_log_names = [log["name"] for log in paged_logs]
+    mr_records = frappe.get_all(
+        "Maintenance Request",
+        filters={"maintenance_log": ["in", paged_log_names]},
+        fields=["name", "maintenance_log"],
+    )
+    # Map: aml_name → mr_name
+    aml_to_mr = {mr["maintenance_log"]: mr["name"] for mr in mr_records}
 
     # ── Build final response ──────────────────────────────────────
     logs = []
@@ -645,6 +1043,7 @@ def get_asset_maintenance_logs(
         logs.append(
             {
                 "name":                  log["name"],
+                "maintenanceRequestId":  aml_to_mr.get(log["name"]),           # ← NEW
                 "assetName":             log["asset_name"],
                 "assetId":               asset_id,
                 "itemCode":              log["item_code"],
@@ -682,10 +1081,10 @@ def get_asset_maintenance_logs(
         "success":    True,
         "customerId": customer_id,
         "status":     status,
-        "count":      len(logs),           # records returned in THIS page
+        "count":      len(logs),
         "logs":       logs,
         "pagination": {
-            "totalCount":  total_count,    # all matching records across all pages
+            "totalCount":  total_count,
             "limit_start": limit_start,
             "limit_end":   limit_end,
             "pageSize":    page_size,
@@ -740,6 +1139,7 @@ def _empty_response(customer_id, status, limit_start, limit_end):
         },
     }
 
+
 @frappe.whitelist(allow_guest=False)
 def get_maintenance_log_details(log_id):
     try:
@@ -790,40 +1190,49 @@ def get_maintenance_log_details(log_id):
             as_dict=True,
         )
 
-        # ── STEP 4: Build response based on Reactive vs Planned ───────────────
+        # ── STEP 4: Look up the linked Maintenance Request ID ──────────────────
+        maintenance_request_id = frappe.db.get_value(
+            "Maintenance Request",
+            {"maintenance_log": log_id},
+            "name",
+        )
+
+        # ── STEP 5: Build response based on Reactive vs Planned ───────────────
         log_type = log.get("custom_asset_maintenance_type")
 
         if log_type == "Reactive":
             response_data = {
-                "name":                         log.get("name"),
-                "asset_name":                   log.get("custom_asset") or "",
-                "item_code":                    log.get("item_code"),
-                "item_name":                    log.get("item_name"),
-                "task_name":                    log.get("task_name"),
-                "maintenance_status":           log.get("maintenance_status"),
-                "maintenance_category":         log.get("custom_maintenance_types") or "",
+                "name":                          log.get("name"),
+                "maintenanceRequestId":          maintenance_request_id or None,   # ← NEW
+                "asset_name":                    log.get("custom_asset") or "",
+                "item_code":                     log.get("item_code"),
+                "item_name":                     log.get("item_name"),
+                "task_name":                     log.get("task_name"),
+                "maintenance_status":            log.get("maintenance_status"),
+                "maintenance_category":          log.get("custom_maintenance_types") or "",
                 "custom_asset_maintenance_type": log_type,
-                "assign_to":                    log.get("custom_assign_to") or "",
-                "periodicity":                  log.get("periodicity"),
-                "completion_date":              log.get("completion_date"),
+                "assign_to":                     log.get("custom_assign_to") or "",
+                "periodicity":                   log.get("periodicity"),
+                "completion_date":               log.get("completion_date"),
             }
 
         else:  # Planned
             response_data = {
-                "name":                         log.get("name"),
-                "asset_name":                   log.get("asset_name") or "",
-                "item_code":                    log.get("item_code"),
-                "item_name":                    log.get("item_name"),
-                "task_name":                    log.get("task_name"),
-                "maintenance_status":           log.get("maintenance_status"),
-                "maintenance_category":         log.get("maintenance_type") or "",
+                "name":                          log.get("name"),
+                "maintenanceRequestId":          maintenance_request_id or None,   # ← NEW
+                "asset_name":                    log.get("asset_name") or "",
+                "item_code":                     log.get("item_code"),
+                "item_name":                     log.get("item_name"),
+                "task_name":                     log.get("task_name"),
+                "maintenance_status":            log.get("maintenance_status"),
+                "maintenance_category":          log.get("maintenance_type") or "",
                 "custom_asset_maintenance_type": log_type,
-                "assign_to":                    log.get("assign_to_name") or "",
-                "periodicity":                  log.get("periodicity"),
-                "completion_date":              log.get("completion_date"),
+                "assign_to":                     log.get("assign_to_name") or "",
+                "periodicity":                   log.get("periodicity"),
+                "completion_date":               log.get("completion_date"),
             }
 
-        # ── STEP 5: Fetch Stock Items (custom_items child table) ───────────────
+        # ── STEP 6: Fetch Stock Items (custom_items child table) ───────────────
         stock_items = frappe.get_all(
             "Stock Items For Asset",
             filters={"parent": log_id},
@@ -839,7 +1248,7 @@ def get_maintenance_log_details(log_id):
         )
         response_data["custom_items"] = stock_items
 
-        # ── STEP 6: Return response ────────────────────────────────────────────
+        # ── STEP 7: Return response ────────────────────────────────────────────
         return Response(
             json.dumps(
                 {

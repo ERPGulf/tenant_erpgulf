@@ -162,7 +162,7 @@ def get_work_status(request_id):
                     custom_quotation_status = quotation_data.get("custom_quotation_status")
 
             # ── Technician details from User doctype ──────────────
-            if log.get("custom_assign_to"):
+            if log.get("custom_assign_to") or log.get("assign_to_name"):
                 technician_name        = log.get("assign_to_name") or log.get("custom_assign_to")
                 technician_assigned_at = technician_set_at or log.get("modified")
 
@@ -183,8 +183,9 @@ def get_work_status(request_id):
     # ── Work status flags ─────────────────────────────────────────
     work_in_progress = bool(
         maintenance_status and
-        maintenance_status not in ["Completed", "Cancelled"]
+        maintenance_status not in ["Cancelled"]
     )
+    
     work_completed  = maintenance_status == "Completed"
     payment_cleared = log_quotation_status == "Paid"
 
