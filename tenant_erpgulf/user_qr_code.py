@@ -1046,8 +1046,6 @@ def get_asset_maintenance_logs(
                 "maintenanceRequestId":  aml_to_mr.get(log["name"]),           # ← NEW
                 "assetName":             log["asset_name"],
                 "assetId":               asset_id,
-                "itemCode":              log["item_code"],
-                "itemName":              log["item_name"],
                 "taskName":              log["task_name"],
                 "maintenanceStatus":     log["maintenance_status"],
                 "maintenanceType":       log["maintenance_type"],
@@ -1100,8 +1098,6 @@ def _log_fields():
     return [
         "name",
         "asset_name",
-        "item_code",
-        "item_name",
         "task_name",
         "maintenance_status",
         "maintenance_type",
@@ -1174,8 +1170,6 @@ def get_maintenance_log_details(log_id):
             [
                 "name",
                 "asset_name",
-                "item_code",
-                "item_name",
                 "task_name",
                 "maintenance_status",
                 "maintenance_type",
@@ -1205,8 +1199,6 @@ def get_maintenance_log_details(log_id):
                 "name":                          log.get("name"),
                 "maintenanceRequestId":          maintenance_request_id or None,   # ← NEW
                 "asset_name":                    log.get("custom_asset") or "",
-                "item_code":                     log.get("item_code"),
-                "item_name":                     log.get("item_name"),
                 "task_name":                     log.get("task_name"),
                 "maintenance_status":            log.get("maintenance_status"),
                 "maintenance_category":          log.get("custom_maintenance_types") or "",
@@ -1221,8 +1213,6 @@ def get_maintenance_log_details(log_id):
                 "name":                          log.get("name"),
                 "maintenanceRequestId":          maintenance_request_id or None,   # ← NEW
                 "asset_name":                    log.get("asset_name") or "",
-                "item_code":                     log.get("item_code"),
-                "item_name":                     log.get("item_name"),
                 "task_name":                     log.get("task_name"),
                 "maintenance_status":            log.get("maintenance_status"),
                 "maintenance_category":          log.get("maintenance_type") or "",
