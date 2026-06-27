@@ -1,0 +1,23 @@
+info:
+  name: payment status
+  type: http
+  seq: 19
+
+http:
+  method: GET
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.quotation_pay.get_customer_quotations
+  body:
+    type: multipart-form
+    data:
+      - name: customer_id
+        type: text
+        value: customer test
+  auth:
+    type: bearer
+    token: eaKHkLU5aDcgfawMe5lli6DbCdAigJ
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -39,10 +39,11 @@ http:
       - name: attachment_ids
         type: file
         value:
-          - /Users/malavikag/Downloads/tenant erpgulf.postman_collection.json
+          - /Users/malavikag/Downloads/QR-CODE-customer test665a79.png
+        contentType: image/png
   auth:
     type: bearer
-    token: SYCzgNOrqIpQue6xYcdma0EaTwEnJZ
+    token: buuYO4LOa1xjnLumc6eiGPv4q1wMhT
 
 settings:
   encodeUrl: true

@@ -14,7 +14,7 @@ http:
         value: 937c612him
   auth:
     type: bearer
-    token: ZOHbHaRbc1w0wPFbzWRuNnjp5QgSpN
+    token: sUGTxziHiN076iNit8E5xCIdSrC2tH
 
 settings:
   encodeUrl: true

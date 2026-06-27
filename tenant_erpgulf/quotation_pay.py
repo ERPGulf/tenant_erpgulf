@@ -104,3 +104,219 @@ def update_payment_status(request_id, is_paid):
         "status":         "Paid",
         "message":        f"Payment marked as cleared on Maintenance Log {mr.maintenance_log}",
     }   
+
+import frappe
+import json
+from datetime import timedelta, date
+from werkzeug.wrappers import Response
+
+
+@frappe.whitelist(allow_guest=False)
+def get_customer_quotations(customer_id):
+    """
+    Returns all quotations linked to a customer's Asset Maintenance Logs.
+
+    Data chain:
+        Customer → Maintenance Request (customer field)
+                 → Asset Maintenance Log (maintenance_log field)
+                 → Quotation (custom_quotation)
+
+    Status logic (derived — not passed as param):
+        AML.custom_quotation_status is null/empty → "awaiting_approval"
+        AML.custom_quotation_status == "Paid"     → "paid"
+        anything else (Pending / Unpaid / etc.)   → "awaiting_payment"
+
+    Response shape per quotation:
+        {
+            "quotationId":     "SAL-QTN-2026-00043",
+            "description":     "Electrical portable appliance testing",
+            "maintenanceLogId":"ACC-AML-2026-00113",
+            "requestId":       "188aam279e",
+            "typeOfTask":      "Reactive",
+            "amount":          "AED 1500.00",
+            "taxAmount":       "AED 150.00",
+            "grandTotal":      "AED 1650.00",
+            "issuedDate":      "2026-06-01",
+            "dueDate":         "2026-06-08",
+            "status":          "awaiting_payment"  | "paid" | "awaiting_approval"
+        }
+    """
+
+    try:
+        # ── STEP 1: Auth ───────────────────────────────────────────────────────
+        current_user = frappe.session.user
+        if not current_user or current_user == "Guest":
+            return Response(
+                json.dumps({"status": "error", "message": "Unauthorized. Please provide a valid Bearer token."}),
+                status=401,
+                mimetype="application/json",
+            )
+
+        # ── STEP 2: Validate input ─────────────────────────────────────────────
+        if not customer_id:
+            return Response(
+                json.dumps({"status": "error", "message": "customer_id is required."}),
+                status=400,
+                mimetype="application/json",
+            )
+
+        # ── STEP 3: Fetch all Maintenance Requests for this customer ───────────
+        mr_records = frappe.get_all(
+            "Maintenance Request",
+            filters={"customer": customer_id},
+            fields=["name", "maintenance_log", "description"],
+        )
+
+        if not mr_records:
+            return _empty_response(customer_id)
+
+        # Build maps:
+        #   aml_name → mr_name
+        #   aml_name → mr_description  (used as quotation description)
+        aml_to_mr   = {}
+        aml_to_desc = {}
+        for mr in mr_records:
+            if mr.get("maintenance_log"):
+                aml_to_mr[mr["maintenance_log"]]   = mr["name"]
+                aml_to_desc[mr["maintenance_log"]]  = mr.get("description") or ""
+
+        aml_names = list(aml_to_mr.keys())
+        if not aml_names:
+            return _empty_response(customer_id)
+
+        # ── STEP 4: Fetch Asset Maintenance Logs that have a quotation ─────────
+        aml_records = frappe.get_all(
+            "Asset Maintenance Log",
+            filters={
+                "name":             ["in", aml_names],
+                "custom_quotation": ["!=", ""],
+            },
+            fields=[
+                "name",
+                "custom_quotation",
+                "custom_quotation_status",
+                "custom_asset_maintenance_type",
+            ],
+        )
+
+        if not aml_records:
+            return _empty_response(customer_id)
+
+        # ── STEP 5: Batch-fetch Quotation details ──────────────────────────────
+        quotation_ids = [a["custom_quotation"] for a in aml_records if a.get("custom_quotation")]
+
+        quotation_map = {}
+        if quotation_ids:
+            qtns = frappe.get_all(
+                "Quotation",
+                filters={"name": ["in", quotation_ids]},
+                fields=[
+                    "name",
+                    "currency",
+                    "total",
+                    "total_taxes_and_charges",
+                    "grand_total",
+                    "transaction_date",
+                    "custom_quotation_status",  # "Approved" / "Rejected" / empty
+                ],
+            )
+            quotation_map = {q["name"]: q for q in qtns}
+
+        # ── STEP 6: Build response list ────────────────────────────────────────
+        quotations = []
+
+        for aml in aml_records:
+            qtn_id     = aml.get("custom_quotation")
+            qtn_info   = quotation_map.get(qtn_id, {})
+
+            # ── Compute status ─────────────────────────────────────────────────
+            # Quotation.custom_quotation_status → "Approved" / "Rejected" / empty
+            # AML.custom_quotation_status       → "Paid" / empty / other
+            qtn_approval   = (qtn_info.get("custom_quotation_status") or "").strip()
+            aml_pay_status = (aml.get("custom_quotation_status") or "").strip()
+
+            if qtn_approval != "Approved":
+                # Quotation not yet approved → awaiting approval regardless of AML
+                status = "awaiting_approval"
+            elif aml_pay_status == "Paid":
+                # Quotation approved + AML marked Paid → fully paid
+                status = "paid"
+            else:
+                # Quotation approved but AML not yet marked Paid → awaiting payment
+                status = "awaiting_payment"
+
+            # ── Dates ──────────────────────────────────────────────────────────
+            issued_date = qtn_info.get("transaction_date")
+            due_date    = None
+            if issued_date:
+                if isinstance(issued_date, str):
+                    from datetime import datetime
+                    issued_date = datetime.strptime(issued_date, "%Y-%m-%d").date()
+                due_date = str(issued_date + timedelta(weeks=1))
+                issued_date = str(issued_date)
+
+            # ── Currency formatting helper ─────────────────────────────────────
+            currency = qtn_info.get("currency") or "AED"
+
+            def fmt(amount):
+                return f"{currency} {float(amount or 0):.2f}"
+
+            quotations.append({
+                "quotationId":     qtn_id,
+                "description":     aml_to_desc.get(aml["name"], ""),
+                "maintenanceLogId": aml["name"],
+                "requestId":       aml_to_mr.get(aml["name"]),
+                "typeOfTask":      aml.get("custom_asset_maintenance_type") or None,
+                "amount":          fmt(qtn_info.get("total")),
+                "taxAmount":       fmt(qtn_info.get("total_taxes_and_charges")),
+                "grandTotal":      fmt(qtn_info.get("grand_total")),
+                "issuedDate":      issued_date,
+                "dueDate":         due_date,
+                "status":          status,
+            })
+
+        # ── STEP 7: Sort — pending approvals first, then awaiting payment, paid last ──
+        STATUS_ORDER = {"awaiting_approval": 0, "awaiting_payment": 1, "paid": 2}
+        quotations.sort(key=lambda x: STATUS_ORDER.get(x["status"], 9))
+
+        return Response(
+            json.dumps(
+                {
+                    "success":     True,
+                    "customerId":  customer_id,
+                    "count":       len(quotations),
+                    "quotations":  quotations,
+                },
+                default=str,
+            ),
+            status=200,
+            mimetype="application/json",
+        )
+
+    except frappe.PermissionError:
+        return Response(
+            json.dumps({"status": "error", "message": "You do not have permission to access this resource."}),
+            status=403,
+            mimetype="application/json",
+        )
+
+    except Exception as e:
+        frappe.log_error(title="get_customer_quotations error", message=frappe.get_traceback())
+        return Response(
+            json.dumps({"status": "error", "message": str(e)}),
+            status=500,
+            mimetype="application/json",
+        )
+
+
+def _empty_response(customer_id):
+    return Response(
+        json.dumps({
+            "success":    True,
+            "customerId": customer_id,
+            "count":      0,
+            "quotations": [],
+        }),
+        status=200,
+        mimetype="application/json",
+    )    

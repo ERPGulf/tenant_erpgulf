@@ -8,7 +8,7 @@ http:
   url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.task.get_employee_tasks
   auth:
     type: bearer
-    token: he5kxBoxZyyeJ4BlSpO5WjsdffgzcJ
+    token: KpxQyviQhCd9wQlFsm95JECuXE2uZT
 
 settings:
   encodeUrl: true

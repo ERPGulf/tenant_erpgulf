@@ -14,7 +14,7 @@ http:
         value: vg0kj6fmr6
   auth:
     type: bearer
-    token: kFwg6CnHJlO81fDCrp72pFXivUSG28
+    token: HCwANx3Q3aYlPz4McBZLqUzvuzS7tv
 
 settings:
   encodeUrl: true
