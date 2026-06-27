@@ -1,0 +1,23 @@
+info:
+  name: get quotation detailsof 1 quotation
+  type: http
+  seq: 21
+
+http:
+  method: GET
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.quotation_pay.get_quotation_details
+  body:
+    type: multipart-form
+    data:
+      - name: quotation_id
+        type: text
+        value: SAL-QTN-2026-00050
+  auth:
+    type: bearer
+    token: eiNpNWzdHgp6NlqiQQZfLTiVDBKTa6
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

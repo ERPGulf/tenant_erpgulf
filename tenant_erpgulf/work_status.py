@@ -182,6 +182,7 @@ def get_work_status(request_id):
 
     # ── Work status flags ─────────────────────────────────────────
     work_in_progress = bool(
+        technician_name and
         maintenance_status and
         maintenance_status not in ["Cancelled"]
     )
