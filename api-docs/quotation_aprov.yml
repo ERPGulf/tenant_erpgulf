@@ -11,13 +11,13 @@ http:
     data:
       - name: quotation_id
         type: text
-        value: SAL-QTN-2026-00050
+        value: SAL-QTN-2026-00054
       - name: is_approved
         type: text
         value: "true"
   auth:
     type: bearer
-    token: bm4SbQIk9XWZWPUh1CHDTtFlCbUg1d
+    token: 9s2zH2vHjcjeLiHWK5NQUvik82KA8h
 
 settings:
   encodeUrl: true

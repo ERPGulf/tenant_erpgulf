@@ -43,7 +43,7 @@ http:
         contentType: image/png
   auth:
     type: bearer
-    token: buuYO4LOa1xjnLumc6eiGPv4q1wMhT
+    token: coRFUeMk0qaYq413eM3r4XzAM1cd7A
 
 settings:
   encodeUrl: true

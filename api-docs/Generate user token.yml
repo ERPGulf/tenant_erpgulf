@@ -20,7 +20,7 @@ http:
         value: dGVuYW50X2VycGd1bGY=
   auth:
     type: bearer
-    token: HtOxDyZYJdjPGIgFwmPBSlUWeQKXHK
+    token: pfAsh9tHvXWsKGSq1KpUTo73EwZK5f
 
 settings:
   encodeUrl: true

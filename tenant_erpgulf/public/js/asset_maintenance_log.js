@@ -7,11 +7,13 @@
 //         set_quotation_filter(frm);
 
 //         // ── Create Quotation button ──
-//         // Show only if: doc is saved (not new), not submitted, and no quotation linked yet
+//         // Show only if: doc is saved (not new), not submitted, no quotation linked yet,
+//         // and status is NOT 'Quotation not reqd'
 //         if (
 //             !frm.is_new() &&
 //             frm.doc.docstatus === 0 &&
-//             !frm.doc.custom_quotation
+//             !frm.doc.custom_quotation &&
+//             frm.doc.custom_quotation_status !== 'Quotation not reqd'
 //         ) {
 //             frm.add_custom_button(__('Quotation'), function() {
 //                 create_quotation_from_maintenance(frm);
@@ -529,6 +531,12 @@ frappe.ui.form.on('Asset Maintenance Log', {
         if (frm.fields_dict['custom_customer']) {
             frm.set_value('custom_customer', '');
         }
+        if (frm.fields_dict['custom_maintenance_team']) {
+            frm.set_value('custom_maintenance_team', '');
+        }
+        if (frm.fields_dict['custom_name_of_task']) {
+            frm.set_value('custom_name_of_task', '');
+        }
 
         apply_reactive_logic(frm);
     },
@@ -838,6 +846,15 @@ function apply_reactive_logic(frm) {
         frm.set_df_property('custom_assign_to', 'hidden', 0);
         frm.set_df_property('custom_assign_to', 'reqd', 0);
 
+        // ── Reactive: custom_maintenance_team & custom_name_of_task are shown,
+        //              task_name is hidden ──
+        frm.set_df_property('custom_maintenance_team', 'hidden', 0);
+        frm.set_df_property('custom_maintenance_team', 'reqd', 0);
+        frm.set_df_property('custom_name_of_task', 'hidden', 0);
+        frm.set_df_property('custom_name_of_task', 'reqd', 0);
+        frm.set_df_property('task_name', 'hidden', 1);
+        frm.set_df_property('task_name', 'reqd', 0);
+
     } else {
         frm.set_df_property('asset_maintenance', 'hidden', 0);
         frm.set_df_property('asset_maintenance', 'reqd', 1);
@@ -860,6 +877,14 @@ function apply_reactive_logic(frm) {
         frm.set_df_property('assign_to_name', 'hidden', 0);
         frm.set_df_property('custom_assign_to', 'hidden', 1);
         frm.set_df_property('custom_assign_to', 'reqd', 0);
+
+        // ── Planned (non-Reactive): custom_maintenance_team & custom_name_of_task
+        //              are hidden, only task_name is shown ──
+        frm.set_df_property('custom_maintenance_team', 'hidden', 1);
+        frm.set_df_property('custom_maintenance_team', 'reqd', 0);
+        frm.set_df_property('custom_name_of_task', 'hidden', 1);
+        frm.set_df_property('custom_name_of_task', 'reqd', 0);
+        frm.set_df_property('task_name', 'hidden', 0);
     }
 
     frm.refresh_fields();
@@ -889,9 +914,10 @@ function create_todo_for_reactive(frm) {
             <b>Asset:</b> ${frm.doc.asset_name || ''}<br>
             <b>Item Code:</b> ${frm.doc.item_code || ''}<br>
             <b>Item Name:</b> ${frm.doc.item_name || ''}<br>
-            <b>Task:</b> ${frm.doc.task_name || ''}<br>
+            <b>Task:</b> ${frm.doc.custom_name_of_task || frm.doc.task_name || ''}<br>
             <b>Maintenance Type:</b> ${frm.doc.custom_maintenance_types || ''}<br>
             <b>Periodicity:</b> ${frm.doc.periodicity || ''}<br>
+            <b>Maintenance Team:</b> ${frm.doc.custom_maintenance_team || ''}<br>
             <b>Customer:</b> ${customer}<br>
             <b>Quotation:</b> ${quotation}
         `;

@@ -11,10 +11,10 @@ http:
     data:
       - name: request_id
         type: text
-        value: 937c612him
+        value: p2150k8b1k
   auth:
     type: bearer
-    token: sUGTxziHiN076iNit8E5xCIdSrC2tH
+    token: coRFUeMk0qaYq413eM3r4XzAM1cd7A
 
 settings:
   encodeUrl: true
