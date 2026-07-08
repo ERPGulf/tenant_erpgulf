@@ -14,7 +14,7 @@ http:
         value: p2150k8b1k
   auth:
     type: bearer
-    token: coRFUeMk0qaYq413eM3r4XzAM1cd7A
+    token: 25yVGjpRf4pXeZxBE5lzuPI77XJ9wZ
 
 settings:
   encodeUrl: true

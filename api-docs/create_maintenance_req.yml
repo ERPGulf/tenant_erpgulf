@@ -40,10 +40,11 @@ http:
         type: file
         value:
           - /Users/malavikag/Downloads/QR-CODE-customer test665a79.png
-        contentType: image/png
+          - /Users/malavikag/Downloads/IMG_7435.MOV
+        contentType: multipart/mixed
   auth:
     type: bearer
-    token: coRFUeMk0qaYq413eM3r4XzAM1cd7A
+    token: 1EudUqfLTJDwf5as1lWFjtXlOr0PvU
 
 settings:
   encodeUrl: true

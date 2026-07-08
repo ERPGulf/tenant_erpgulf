@@ -17,13 +17,13 @@ http:
         value: All
       - name: limit_start
         type: text
-        value: "6"
+        value: "0"
       - name: limit_end
         type: text
-        value: "81"
+        value: "6"
   auth:
     type: bearer
-    token: 9E0i3W8XCUuV687DeP6GYwLVAIz1sb
+    token: 1ukn33nXs0fGdCkGTDLkXzgbeZpi8H
 
 settings:
   encodeUrl: true

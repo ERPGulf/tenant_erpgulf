@@ -97,25 +97,23 @@
 #                     message=f"deleted={existing} | doc={self.name}"
 #                 )
 
+#             # ── Determine task name based on maintenance type ───────────────────
+#             if self.custom_asset_maintenance_type == "Reactive":
+#                 task_name = self.get("custom_name_of_task") or ""
+#             else:
+#                 task_name = self.get("task_name") or ""
+
 #             # ── Build description ──────────────────────────────────────────────
 #             description = """
 #                 <b>Reactive Maintenance Task</b><br>
 #                 <b>Asset:</b> {asset}<br>
-#                 <b>Item Code:</b> {item_code}<br>
-#                 <b>Item Name:</b> {item_name}<br>
 #                 <b>Task:</b> {task}<br>
 #                 <b>Maintenance Type:</b> {mtype}<br>
-#                 <b>Periodicity:</b> {periodicity}<br>
-#                 <b>Customer:</b> {customer}<br>
 #                 <b>Quotation:</b> {quotation}
 #             """.format(
 #                 asset       = self.get("asset_name") or "",
-#                 item_code   = self.get("item_code") or "",
-#                 item_name   = self.get("item_name") or "",
-#                 task        = self.get("task_name") or "",
+#                 task        = task_name,
 #                 mtype       = self.get("custom_maintenance_types") or "",
-#                 periodicity = self.get("periodicity") or "",
-#                 customer    = self.get("custom_customer") or "",
 #                 quotation   = self.get("custom_quotation") or "",
 #             )
 
@@ -524,23 +522,6 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
             if not self.get("custom_assign_to"):
                 return
 
-            # ── Avoid duplicate: delete existing open ToDo for this log ────────
-            existing = frappe.db.get_value(
-                "ToDo",
-                {
-                    "reference_type": "Asset Maintenance Log",
-                    "reference_name": self.name,
-                    "status":         "Open",
-                },
-                "name",
-            )
-            if existing:
-                frappe.delete_doc("ToDo", existing, ignore_permissions=True)
-                frappe.log_error(
-                    title="[Reactive] on_update — old ToDo deleted",
-                    message=f"deleted={existing} | doc={self.name}"
-                )
-
             # ── Determine task name based on maintenance type ───────────────────
             if self.custom_asset_maintenance_type == "Reactive":
                 task_name = self.get("custom_name_of_task") or ""
@@ -561,22 +542,44 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
                 quotation   = self.get("custom_quotation") or "",
             )
 
-            todo = frappe.get_doc({
-                "doctype":        "ToDo",
-                "reference_type": "Asset Maintenance Log",
-                "reference_name": self.name,
-                "description":    description,
-                "priority":       "Medium",
-                "status":         "Open",
-                "date":           self.get("due_date") or frappe.utils.nowdate(),
-                "allocated_to":   self.get("custom_assign_to"),
-            })
-            todo.insert(ignore_permissions=True)
-
-            frappe.log_error(
-                title="[Reactive] on_update — ToDo CREATED",
-                message=f"todo={todo.name} | assigned_to={self.get('custom_assign_to')} | doc={self.name}"
+            # ── Check if a ToDo already exists for this log ────────────────────
+            existing = frappe.db.get_value(
+                "ToDo",
+                {
+                    "reference_type": "Asset Maintenance Log",
+                    "reference_name": self.name,
+                },
+                "name",
             )
+
+            if existing:
+                # ── Update in place — preserve the same ToDo ID ────────────────
+                todo = frappe.get_doc("ToDo", existing)
+                todo.description  = description
+                todo.date         = self.get("due_date") or frappe.utils.nowdate()
+                todo.allocated_to = self.get("custom_assign_to")
+                todo.save(ignore_permissions=True)
+                frappe.log_error(
+                    title="[Reactive] on_update — ToDo UPDATED (same ID)",
+                    message=f"todo={existing} | assigned_to={self.get('custom_assign_to')} | doc={self.name}"
+                )
+            else:
+                # ── First save: create the ToDo ────────────────────────────────
+                todo = frappe.get_doc({
+                    "doctype":        "ToDo",
+                    "reference_type": "Asset Maintenance Log",
+                    "reference_name": self.name,
+                    "description":    description,
+                    "priority":       "Medium",
+                    "status":         "Open",
+                    "date":           self.get("due_date") or frappe.utils.nowdate(),
+                    "allocated_to":   self.get("custom_assign_to"),
+                })
+                todo.insert(ignore_permissions=True)
+                frappe.log_error(
+                    title="[Reactive] on_update — ToDo CREATED",
+                    message=f"todo={todo.name} | assigned_to={self.get('custom_assign_to')} | doc={self.name}"
+                )
 
         except Exception:
             frappe.log_error(
