@@ -1,5 +1,5 @@
 info:
-  name: payment_status
+  name: B-payment_status
   type: http
   seq: 16
 

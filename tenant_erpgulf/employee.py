@@ -195,6 +195,189 @@ def generate_employee_qr(employee_id):
             mimetype="application/json"
         )
 
+# @frappe.whitelist(allow_guest=False)
+# def get_location_full_details(location_name):
+#     try:
+#         # ── STEP 1: Identify user from Bearer token ────────────────────────────
+#         current_user = frappe.session.user
+
+#         if not current_user or current_user == "Guest":
+#             return Response(
+#                 json.dumps({
+#                     "status": "error",
+#                     "message": "Unauthorized. Please provide a valid Bearer token.",
+#                 }),
+#                 status=401,
+#                 mimetype="application/json",
+#             )
+
+#         # ── STEP 2: Validate Location ──────────────────────────────────────────
+#         if not frappe.db.exists("Location", location_name):
+#             return Response(
+#                 json.dumps({
+#                     "status": "error",
+#                     "message": f"Location '{location_name}' not found",
+#                 }),
+#                 status=404,
+#                 mimetype="application/json",
+#             )
+
+#         # ── STEP 3: Fetch only required Location fields ────────────────────────
+#         location = frappe.db.get_value(
+#             "Location",
+#             location_name,
+#             [
+#                 "name",
+#                 "owner",
+#                 "location_name",
+#                 "custom_flat_number",
+#                 "custom_floor",
+#                 "custom_building",
+#                 "custom_compound",
+#                 "custom_department",
+#                 "custom_customer",
+#             ],
+#             as_dict=True,
+#         )
+
+#         # ── STEP 4: Fetch room_name from Room Equipment child table ────────────
+#         room_equipment = frappe.get_all(
+#             "Room Equipment",
+#             filters={"parent": location_name},
+#             fields=["room_name"],
+#         )
+#         location["room_equipment"] = room_equipment
+
+#         # ── STEP 5: Fetch all Assets linked to this Location ──────────────────
+#         assets = frappe.get_all(
+#             "Asset",
+#             filters={"location": location_name},
+#             fields=[
+#                 "name",
+#                 "asset_name",
+#                 "location",
+#                 "asset_category",
+#                 "custom_room_name",
+#             ],
+#         )
+
+#         # ── STEP 6: Enrich each Asset with Maintenance Logs ───────────────────
+#         enriched_assets = []
+
+#         for asset in assets:
+#             asset_dict = dict(asset)
+
+#             # ── 6a: Reactive logs → custom_asset = asset["name"] ──────────────
+#             reactive_logs = frappe.get_all(
+#                 "Asset Maintenance Log",
+#                 filters={
+#                     "custom_asset":                  asset["name"],
+#                     "custom_asset_maintenance_type": "Reactive",
+#                 },
+#                 fields=[
+#                     "name",
+#                     "asset_name",
+#                     "task_name",
+#                     "maintenance_status",
+#                     "maintenance_type",
+#                     "custom_maintenance_types",
+#                     "custom_asset_maintenance_type",
+#                     "custom_asset",
+#                     "completion_date",
+#                     "custom_assign_to",
+#                     "assign_to_name",
+#                 ],
+#             )
+
+#             # ── 6b: Planned logs → asset_name = asset["asset_name"] ───────────
+#             planned_logs = frappe.get_all(
+#                 "Asset Maintenance Log",
+#                 filters={
+#                     "asset_name":                    asset["asset_name"],
+#                     "custom_asset_maintenance_type": "Planned",
+#                 },
+#                 fields=[
+#                     "name",
+#                     "asset_name",
+#                     "task_name",
+#                     "maintenance_status",
+#                     "maintenance_type",
+#                     "custom_maintenance_types",
+#                     "custom_asset_maintenance_type",
+#                     "completion_date",
+#                     "assign_to_name",
+#                 ],
+#             )
+
+#             # ── 6c: Merge both log types ───────────────────────────────────────
+#             all_logs = reactive_logs + planned_logs
+
+#             # ── 6d: Enrich each log with stock items ───────────────────────────
+#             enriched_logs = []
+#             for log in all_logs:
+#                 log_dict = dict(log)
+
+#                 stock_items = frappe.get_all(
+#                     "Stock Items For Asset",
+#                     filters={"parent": log["name"]},
+#                     fields=[
+#                         "name",
+#                         "item_code",
+#                         "qty",
+#                         "uom",
+#                         "stock_uom",
+#                         "conversion_factor",
+#                         "s_warehouse",
+#                     ],
+#                 )
+#                 log_dict["custom_items"] = stock_items
+#                 enriched_logs.append(log_dict)
+
+#             asset_dict["maintenance_logs"] = enriched_logs
+#             enriched_assets.append(asset_dict)
+
+#         # ── STEP 7: Build and return final response ────────────────────────────
+#         return Response(
+#             json.dumps(
+#                 {
+#                     "status": "success",
+#                     "data": {
+#                         "location": location,
+#                         "assets":   enriched_assets,
+#                     }
+#                 },
+#                 default=str
+#             ),
+#             status=200,
+#             mimetype="application/json",
+#         )
+
+#     except frappe.PermissionError:
+#         return Response(
+#             json.dumps({
+#                 "status": "error",
+#                 "message": "You do not have permission to access this resource",
+#             }),
+#             status=403,
+#             mimetype="application/json",
+#         )
+
+#     except Exception as e:
+#         frappe.log_error(
+#             title="get_location_full_details error",
+#             message=frappe.get_traceback()
+#         )
+#         return Response(
+#             json.dumps({
+#                 "status": "error",
+#                 "message": str(e),
+#             }),
+#             status=500,
+#             mimetype="application/json",
+#         )
+
+
+
 @frappe.whitelist(allow_guest=False)
 def get_location_full_details(location_name):
     try:
@@ -255,8 +438,6 @@ def get_location_full_details(location_name):
             fields=[
                 "name",
                 "asset_name",
-                "item_code",
-                "item_name",
                 "location",
                 "asset_category",
                 "custom_room_name",
@@ -275,24 +456,20 @@ def get_location_full_details(location_name):
                 filters={
                     "custom_asset":                  asset["name"],
                     "custom_asset_maintenance_type": "Reactive",
+                    "docstatus":                     ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
                 },
                 fields=[
                     "name",
                     "asset_name",
-                    "item_code",
-                    "item_name",
                     "task_name",
                     "maintenance_status",
                     "maintenance_type",
                     "custom_maintenance_types",
                     "custom_asset_maintenance_type",
                     "custom_asset",
-                    "periodicity",
                     "completion_date",
-                    "description",
                     "custom_assign_to",
                     "assign_to_name",
-                    "custom_default_warehouse",
                 ],
             )
 
@@ -302,24 +479,18 @@ def get_location_full_details(location_name):
                 filters={
                     "asset_name":                    asset["asset_name"],
                     "custom_asset_maintenance_type": "Planned",
+                    "docstatus":                     ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
                 },
                 fields=[
                     "name",
                     "asset_name",
-                    "item_code",
-                    "item_name",
                     "task_name",
                     "maintenance_status",
                     "maintenance_type",
                     "custom_maintenance_types",
                     "custom_asset_maintenance_type",
-                    "custom_asset",
-                    "periodicity",
                     "completion_date",
-                    "description",
-                    "custom_assign_to",
                     "assign_to_name",
-                    "custom_default_warehouse",
                 ],
             )
 
@@ -330,6 +501,27 @@ def get_location_full_details(location_name):
             enriched_logs = []
             for log in all_logs:
                 log_dict = dict(log)
+
+                maintenance_kind = log_dict.get("custom_asset_maintenance_type")
+
+                if maintenance_kind == "Reactive":
+                    # Reactive logs only carry custom_maintenance_types; drop maintenance_type
+                    log_dict.pop("maintenance_type", None)
+
+                    # Reactive logs have no task; always null out task_name
+                    log_dict["task_name"] = None
+
+                    # assign_to_name is sourced from custom_assign_to for Reactive logs,
+                    # but the output parameter name stays "assign_to_name" in both cases
+                    log_dict["assign_to_name"] = log_dict.get("custom_assign_to")
+                    log_dict.pop("custom_assign_to", None)
+
+                elif maintenance_kind == "Planned":
+                    # Planned logs only carry maintenance_type; drop custom_maintenance_types
+                    log_dict.pop("custom_maintenance_types", None)
+
+                    # task_name and assign_to_name are already sourced correctly
+                    # from their respective fields for Planned logs.
 
                 stock_items = frappe.get_all(
                     "Stock Items For Asset",
@@ -389,10 +581,6 @@ def get_location_full_details(location_name):
             status=500,
             mimetype="application/json",
         )
-
-
-
-
 
 @frappe.whitelist(allow_guest=True)
 def generate_and_send_otp(mobile_no):

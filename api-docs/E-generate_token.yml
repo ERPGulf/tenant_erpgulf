@@ -1,20 +1,20 @@
 info:
-  name: generate_customer_token
+  name: E-generate_token
   type: http
-  seq: 12
+  seq: 1
 
 http:
   method: POST
-  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.customer_user_token.generate_token_secure_for_customers
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.tenant_erpgulf.token.generate_token_secure
   body:
     type: multipart-form
     data:
-      - name: customer_id
+      - name: api_key
         type: text
-        value: customer test
-      - name: password
+        value: Administrator
+      - name: api_secret
         type: text
-        value: Friday2000@TY
+        value: Friday2000@T
       - name: app_key
         type: text
         value: dGVuYW50X2VycGd1bGY=

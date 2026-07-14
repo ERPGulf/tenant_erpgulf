@@ -20,7 +20,9 @@
   "status",
   "maintenance_log",
   "date_of_submit",
-  "custom_status_changed_date"
+  "custom_status_changed_date",
+  "maintenance_date",
+  "time_slot"
  ],
  "fields": [
   {
@@ -118,13 +120,24 @@
    "fieldtype": "Date",
    "hidden": 1,
    "label": "custom_status_changed_date"
+  },
+  {
+   "fieldname": "maintenance_date",
+   "fieldtype": "Date",
+   "label": "Maintenance Date"
+  },
+  {
+   "fieldname": "time_slot",
+   "fieldtype": "Select",
+   "label": "Time Slot",
+   "options": "9-10 AM\n10-11 AM\n11-12 PM\n12-1 PM\n2-3 PM\n3-4 PM\n4-5 PM"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-23 10:59:32.108208",
+ "modified": "2026-07-13 18:45:04.034601",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Maintenance Request",

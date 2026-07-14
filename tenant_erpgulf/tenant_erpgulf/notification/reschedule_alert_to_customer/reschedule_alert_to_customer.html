@@ -1,0 +1,9 @@
+<p>Dear Customer,</p>
+<p>Your maintenance visit has been rescheduled.</p>
+{% for row in doc.custom_reschedule_history_table %}
+{% if row.is_rescheduled and row.scheduled_date %}
+<p><b>New Scheduled Date:</b> {{ row.scheduled_date }}<br>
+<b>Remarks:</b> {{ row.remarks or "-" }}</p>
+{% endif %}
+{% endfor %}
+<p>Regards,<br>Support Team</p>

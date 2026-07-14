@@ -1,5 +1,5 @@
 info:
-  name: Generate user token
+  name: E-Generate user token
   type: http
   seq: 7
 
@@ -20,7 +20,7 @@ http:
         value: dGVuYW50X2VycGd1bGY=
   auth:
     type: bearer
-    token: IsmxXToo8FnZrrhfRHiNw2ughzYnOb
+    token: UtTBPQ0oUlXo8BPaHJ8jZoXtWi9Nud
 
 settings:
   encodeUrl: true

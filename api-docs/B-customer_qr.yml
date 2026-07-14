@@ -1,17 +1,17 @@
 info:
-  name: generate_otp
+  name: B-customer_qr
   type: http
-  seq: 9
+  seq: 2
 
 http:
   method: POST
-  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.generate_and_send_otp
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.user_qr_code.generate_customer_qr
   body:
     type: multipart-form
     data:
-      - name: mobile_no
+      - name: customer_id
         type: text
-        value: "918281693215"
+        value: customer test
   auth:
     type: bearer
     token: ""

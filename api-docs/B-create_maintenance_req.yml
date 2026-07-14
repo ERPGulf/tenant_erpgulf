@@ -1,5 +1,5 @@
 info:
-  name: create_maintenance_req
+  name: B-create_maintenance_req
   type: http
   seq: 5
 
@@ -42,9 +42,15 @@ http:
           - /Users/malavikag/Downloads/QR-CODE-customer test665a79.png
           - /Users/malavikag/Downloads/IMG_7435.MOV
         contentType: multipart/mixed
+      - name: time_slot
+        type: text
+        value: 9-10 AM
+      - name: maintenance_date
+        type: text
+        value: 2026-07-20
   auth:
     type: bearer
-    token: 1EudUqfLTJDwf5as1lWFjtXlOr0PvU
+    token: P35q3g2oNYDiO1B8dDAz0BOy3CoVNZ
 
 settings:
   encodeUrl: true

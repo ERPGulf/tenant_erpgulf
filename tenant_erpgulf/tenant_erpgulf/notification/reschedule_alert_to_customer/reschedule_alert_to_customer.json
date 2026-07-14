@@ -1,0 +1,35 @@
+{
+ "attach_files": "",
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "",
+ "condition_type": "Python",
+ "creation": "2026-07-09 08:50:10.085789",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Asset Maintenance Log",
+ "enabled": 1,
+ "event": "Method",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "<p>Dear Customer,</p>\n<p>Your maintenance visit has been rescheduled.</p>\n{% for row in doc.custom_reschedule_history_table %}\n{% if row.is_rescheduled and row.scheduled_date %}\n<p><b>New Scheduled Date:</b> {{ row.scheduled_date }}<br>\n<b>Remarks:</b> {{ row.remarks or \"-\" }}</p>\n{% endif %}\n{% endfor %}\n<p>Regards,<br>Support Team</p>",
+ "message_type": "HTML",
+ "minutes_offset": 0,
+ "modified": "2026-07-13 16:55:24.064035",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "Reschedule Alert to Customer",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "custom__customer_email",
+   "receiver_by_role": "Customer"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "malavika@htsqatar.com",
+ "sender_email": "malavika@htsqatar.com",
+ "subject": "Your maintenance visit has been rescheduled - {{ doc.name }}"
+}

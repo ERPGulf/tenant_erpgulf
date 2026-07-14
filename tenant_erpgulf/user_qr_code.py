@@ -314,6 +314,7 @@ import frappe
 from frappe import _
 
 
+
 @frappe.whitelist(allow_guest=False)
 def create_maintenance_request(
     customer,
@@ -325,6 +326,8 @@ def create_maintenance_request(
     location,
     description,
     phone_number,
+    maintenance_date,
+    time_slot,
 ):
     """
     POST API to create a Maintenance Request with multiple file uploads.
@@ -339,6 +342,8 @@ def create_maintenance_request(
       location          → adc
       description       → abc
       phone_number      → 8281693215
+      maintenance_date  → 2026-07-20
+      time_slot         → 10:00 AM - 12:00 PM
       attachment_ids    → file1.jpg   (File type — select multiple files)
       attachment_ids    → file2.jpg   (add same key again for multiple)
     """
@@ -354,6 +359,8 @@ def create_maintenance_request(
         "location":         location,
         "description":      description,
         "phone_number":     phone_number,
+        "maintenance_date": maintenance_date,
+        "time_slot":        time_slot,
     }
     missing = [k for k, v in required.items() if not v]
     if missing:
@@ -373,6 +380,8 @@ def create_maintenance_request(
     doc.location         = location
     doc.description      = description
     doc.phone_number     = phone_number
+    doc.maintenance_date = maintenance_date
+    doc.time_slot        = time_slot
 
     # doc.insert(ignore_permissions=False)
     # frappe.db.commit()
@@ -468,26 +477,25 @@ def create_maintenance_request(
         "success": True,
         "message": "Maintenance Request created successfully",
         "data": {
-            "name":            doc.name,
-            "customer":        doc.customer,
-            "priority":        doc.priority,
-            "maintenanceType": doc.maintenance_type,
-            "flat":            doc.flat,
-            "room":            doc.room,
-            "asset":           doc.asset,
-            "location":        doc.location,
-            "description":     doc.description,
-            "phoneNumber":     doc.phone_number,
-            "status":          doc.docstatus,
-            "createdAt":       str(doc.creation),
-            "updatedAt":       str(doc.modified),
-            "attachmentCount": len(attachments),
-            "attachments":     attachments,
+            "name":             doc.name,
+            "customer":         doc.customer,
+            "priority":         doc.priority,
+            "maintenanceType":  doc.maintenance_type,
+            "flat":             doc.flat,
+            "room":             doc.room,
+            "asset":            doc.asset,
+            "location":         doc.location,
+            "description":      doc.description,
+            "phoneNumber":      doc.phone_number,
+            "maintenanceDate":  str(doc.maintenance_date) if doc.maintenance_date else None,
+            "timeSlot":         doc.time_slot,
+            "status":           doc.docstatus,
+            "createdAt":        str(doc.creation),
+            "updatedAt":        str(doc.modified),
+            "attachmentCount":  len(attachments),
+            "attachments":      attachments,
         },
     }
-
-
-
 
 import frappe
 from frappe import _

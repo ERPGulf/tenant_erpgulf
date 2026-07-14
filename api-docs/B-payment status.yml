@@ -1,17 +1,17 @@
 info:
-  name: get quotation detailsof 1 quotation
+  name: B-payment status
   type: http
-  seq: 21
+  seq: 19
 
 http:
   method: GET
-  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.quotation_pay.get_quotation_details
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.quotation_pay.get_customer_quotations
   body:
     type: multipart-form
     data:
-      - name: quotation_id
+      - name: customer_id
         type: text
-        value: SAL-QTN-2026-00050
+        value: customer test
   auth:
     type: bearer
     token: 6xKVrRPZraHjKbBu1MggdQqmvGdBP6

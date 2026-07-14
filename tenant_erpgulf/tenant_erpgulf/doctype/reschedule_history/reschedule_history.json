@@ -9,7 +9,8 @@
   "remarks",
   "date_time",
   "is_rescheduled",
-  "scheduled_date"
+  "scheduled_date",
+  "notification_send"
  ],
  "fields": [
   {
@@ -36,13 +37,19 @@
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Scheduled Date"
+  },
+  {
+   "default": "1",
+   "fieldname": "notification_send",
+   "fieldtype": "Check",
+   "label": "Notification Send"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-08 09:18:07.905856",
+ "modified": "2026-07-13 16:49:23.898501",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Reschedule History",

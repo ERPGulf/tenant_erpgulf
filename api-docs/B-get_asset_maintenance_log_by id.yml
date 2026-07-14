@@ -1,5 +1,5 @@
 info:
-  name: get_asset_maintenance_log_by id
+  name: B-get_asset_maintenance_log_by id
   type: http
   seq: 11
 

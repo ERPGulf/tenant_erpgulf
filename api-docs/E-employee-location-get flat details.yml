@@ -1,5 +1,5 @@
 info:
-  name: employee-location-get flat details
+  name: E-employee-location-get flat details
   type: http
   seq: 8
 
@@ -11,10 +11,10 @@ http:
     data:
       - name: location_name
         type: text
-        value: adc
+        value: xyz
   auth:
     type: bearer
-    token: ""
+    token: jqcUy1TFnbQKmJE5HbKfp95zAasdp2
 
 settings:
   encodeUrl: true
