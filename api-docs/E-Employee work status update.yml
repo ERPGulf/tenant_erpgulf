@@ -1,7 +1,7 @@
 info:
   name: E-Employee work status update
   type: http
-  seq: 22
+  seq: 21
 
 http:
   method: GET

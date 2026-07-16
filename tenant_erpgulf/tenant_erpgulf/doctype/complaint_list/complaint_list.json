@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "field:name1",
  "creation": "2026-06-30 08:59:26.099647",
@@ -19,7 +20,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-30 09:00:43.447812",
+ "modified": "2026-07-15 21:46:50.829829",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Complaint List",

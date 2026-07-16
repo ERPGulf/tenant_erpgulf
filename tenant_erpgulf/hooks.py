@@ -281,3 +281,10 @@ doctype_js = {
     "Maintenance Request":"public/js/maintenance_request.js"
 
 }
+scheduler_events = {
+    "cron": {
+        "37 8 * * *": [  # 8:30 PM every night
+            "tenant_erpgulf.notification.auto_cancel_overdue_maintenance_logs"
+        ]
+    }
+}

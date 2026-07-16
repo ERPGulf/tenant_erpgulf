@@ -1,0 +1,36 @@
+{
+ "attach_files": "",
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "doc.custom_quotation_status == 'Paid' and doc.maintenance_status != 'Completed'",
+ "condition_type": "Python",
+ "creation": "2026-07-14 17:32:12.416171",
+ "date_changed": "creation",
+ "days_in_advance": 3,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Asset Maintenance Log",
+ "enabled": 1,
+ "event": "Days After",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "<p>Dear Customer,</p>\\n<p>We notice that payment for your maintenance visit has been received, but the visit has not yet been completed.</p>\\n<p><b>Reference:</b> {{ doc.name }}<br>\\n<b>Current Status:</b> {{ doc.maintenance_status }}</p>\\n<p>Our team will follow up shortly. If you have any questions, please contact support.</p>\\n<p>Regards,<br>Support Team</p>",
+ "message_type": "HTML",
+ "minutes_offset": 0,
+ "modified": "2026-07-14 17:32:12.416171",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "Overdue Maintenance Alert to Customer",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "custom__customer_email",
+   "receiver_by_role": "Customer"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "malavika@htsqatar.com",
+ "sender_email": "malavika@htsqatar.com",
+ "subject": "Your maintenance visit is still pending - {{ doc.name }}"
+}

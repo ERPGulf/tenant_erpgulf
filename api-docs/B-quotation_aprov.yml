@@ -1,7 +1,7 @@
 info:
   name: B-quotation_aprov
   type: http
-  seq: 15
+  seq: 14
 
 http:
   method: POST

@@ -1,7 +1,7 @@
 info:
   name: B-payment_status
   type: http
-  seq: 16
+  seq: 15
 
 http:
   method: POST

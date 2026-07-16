@@ -1,12 +1,23 @@
 info:
   name: B-time-slot-available
   type: http
-  seq: 25
+  seq: 24
 
 http:
   method: GET
-  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.
-  auth: inherit
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.time_slot.get_available_time_slots
+  body:
+    type: multipart-form
+    data:
+      - name: maintenance_type
+        type: text
+        value: Preventive Maintenance
+      - name: maintenance_date
+        type: text
+        value: 20-07-2026
+  auth:
+    type: bearer
+    token: ZgovcfM4JTB5CTOEJK25KjTHVWCPg9
 
 settings:
   encodeUrl: true
