@@ -17,7 +17,7 @@ http:
         value: 20-07-2026
   auth:
     type: bearer
-    token: ZgovcfM4JTB5CTOEJK25KjTHVWCPg9
+    token: ""
 
 settings:
   encodeUrl: true

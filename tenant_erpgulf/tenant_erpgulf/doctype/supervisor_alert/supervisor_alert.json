@@ -7,7 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
-  "description"
+  "description",
+  "notification"
  ],
  "fields": [
   {
@@ -19,13 +20,19 @@
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "default": "1",
+   "fieldname": "notification",
+   "fieldtype": "Check",
+   "label": "Notification"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-16 09:38:40.629976",
+ "modified": "2026-07-16 11:38:06.621808",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Supervisor Alert",

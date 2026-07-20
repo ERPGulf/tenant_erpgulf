@@ -17,7 +17,7 @@ http:
         value: "true"
   auth:
     type: bearer
-    token: g7tgtrjiEiQDXduAsmYcuy54wn6kOm
+    token: ""
 
 settings:
   encodeUrl: true

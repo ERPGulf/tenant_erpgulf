@@ -23,7 +23,7 @@ http:
         value: "6"
   auth:
     type: bearer
-    token: 1ukn33nXs0fGdCkGTDLkXzgbeZpi8H
+    token: ""
 
 settings:
   encodeUrl: true

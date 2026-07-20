@@ -1,3 +1,62 @@
+# import frappe
+# from frappe import _
+
+
+# @frappe.whitelist(allow_guest=False)
+# def update_quotation_approval(quotation_id, is_approved):
+#     """
+#     API to approve or reject a Quotation by updating custom_quotation_status.
+
+#     Params:
+#         quotation_id → Quotation name (e.g. "SAL-QTN-2026-00001")
+#         is_approved  → true  → sets custom_quotation_status = "Approved"
+#                        false → sets custom_quotation_status = "Rejected"
+#     """
+
+#     if not quotation_id:
+#         frappe.throw(_("quotation_id is required"), frappe.MandatoryError)
+
+#     if not frappe.db.exists("Quotation", quotation_id):
+#         frappe.throw(
+#             _("Quotation '{0}' not found").format(quotation_id),
+#             frappe.DoesNotExistError,
+#         )
+
+#     # ── Cast is_approved to bool (comes as string from API) ───────
+#     if isinstance(is_approved, str):
+#         is_approved = is_approved.lower() in ("1", "true", "yes")
+
+#     new_status = "Approved" if is_approved else "Rejected"
+#     if is_approved:
+#         aml_names = frappe.get_all(
+#             "Asset Maintenance Log",
+#             filters={"custom_quotation": quotation_id},
+#             pluck="name",
+#         )
+#         for aml_name in aml_names:
+#             aml_doc = frappe.get_doc("Asset Maintenance Log", aml_name)
+#             aml_doc.custom_quotation_status = "Quotation approved"
+#             aml_doc.save(ignore_permissions=True)
+#             updated_logs.append(aml_name)
+
+
+#     # ── Update custom_quotation_status on Quotation ───────────────
+#     frappe.db.set_value(
+#         "Quotation",
+#         quotation_id,
+#         "custom_quotation_status",
+#         new_status,
+#         update_modified=True,
+#     )
+#     frappe.db.commit()
+
+#     return {
+#         "success":     True,
+#         "quotationId": quotation_id,
+#         "status":      new_status,
+#         "message":     f"Quotation {quotation_id} has been {new_status.lower()} successfully",
+#     }
+
 import frappe
 from frappe import _
 
@@ -28,6 +87,19 @@ def update_quotation_approval(quotation_id, is_approved):
 
     new_status = "Approved" if is_approved else "Rejected"
 
+    if is_approved:
+        updated_logs = []
+        aml_names = frappe.get_all(
+            "Asset Maintenance Log",
+            filters={"custom_quotation": quotation_id},
+            pluck="name",
+        )
+        for aml_name in aml_names:
+            aml_doc = frappe.get_doc("Asset Maintenance Log", aml_name)
+            aml_doc.custom_quotation_status = "Quotation approved"
+            aml_doc.save(ignore_permissions=True)
+            updated_logs.append(aml_name)
+
     # ── Update custom_quotation_status on Quotation ───────────────
     frappe.db.set_value(
         "Quotation",
@@ -44,8 +116,7 @@ def update_quotation_approval(quotation_id, is_approved):
         "status":      new_status,
         "message":     f"Quotation {quotation_id} has been {new_status.lower()} successfully",
     }
-
-
+    
 @frappe.whitelist(allow_guest=False)
 def update_payment_status(request_id, is_paid):
     """

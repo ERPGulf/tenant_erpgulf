@@ -11,7 +11,7 @@ http:
     data:
       - name: asset_maintenance_log
         type: text
-        value: ACC-AML-2026-00167
+        value: ACC-AML-2026-00168
       - name: title
         type: text
         value: SDFSFSAD
@@ -20,7 +20,7 @@ http:
         value: description
   auth:
     type: bearer
-    token: Qc7Io9V4biFdGROq8ZpVywouvtdGZY
+    token: ""
 
 settings:
   encodeUrl: true

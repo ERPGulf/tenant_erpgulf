@@ -1,0 +1,35 @@
+{
+ "attach_files": "",
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "doc.custom_supervisor_alert and len(doc.custom_supervisor_alert) > 0",
+ "condition_type": "Python",
+ "creation": "2026-07-16 10:27:31.559870",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Asset Maintenance Log",
+ "enabled": 1,
+ "event": "Method",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "New Supervisor Alert: {{ doc.custom_supervisor_alert[-1].title }}<br>\n{{ doc.custom_supervisor_alert[-1].description }}",
+ "message_type": "HTML",
+ "minutes_offset": 0,
+ "modified": "2026-07-16 11:55:45.156575",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "Supervisor Alert Notification",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "",
+   "receiver_by_role": "Supervisor"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "malavika@htsqatar.com",
+ "sender_email": "malavika@htsqatar.com",
+ "subject": "New Supervisor Alert on {{ doc.name }}"
+}

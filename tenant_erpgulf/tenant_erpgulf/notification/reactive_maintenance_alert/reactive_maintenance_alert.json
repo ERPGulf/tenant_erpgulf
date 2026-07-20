@@ -1,0 +1,36 @@
+{
+ "attach_files": "",
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "doc.custom_asset_maintenance_type == \"Reactive\"",
+ "condition_type": "Python",
+ "creation": "2026-07-16 10:15:26.817877",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Asset Maintenance Log",
+ "enabled": 1,
+ "event": "Value Change",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "Asset {{ doc.asset_name }} ({{ doc.custom_asset }}) requires reactive maintenance.<br>Maintenance Log: {{ doc.name }}<br>Status: {{ doc.maintenance_status }}",
+ "message_type": "HTML",
+ "minutes_offset": 0,
+ "modified": "2026-07-16 10:15:26.817877",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "Reactive Maintenance Alert",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "custom_assign_to",
+   "receiver_by_role": "Employee"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "malavika@htsqatar.com",
+ "sender_email": "malavika@htsqatar.com",
+ "subject": "Reactive Maintenance Assigned: {{ doc.name }}",
+ "value_changed": "custom_asset_maintenance_type"
+}

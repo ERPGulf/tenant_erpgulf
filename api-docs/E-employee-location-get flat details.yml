@@ -14,7 +14,7 @@ http:
         value: xyz
   auth:
     type: bearer
-    token: jqcUy1TFnbQKmJE5HbKfp95zAasdp2
+    token: ""
 
 settings:
   encodeUrl: true

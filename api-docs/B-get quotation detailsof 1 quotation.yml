@@ -14,7 +14,7 @@ http:
         value: SAL-QTN-2026-00050
   auth:
     type: bearer
-    token: 6xKVrRPZraHjKbBu1MggdQqmvGdBP6
+    token: ""
 
 settings:
   encodeUrl: true
