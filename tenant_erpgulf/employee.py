@@ -195,6 +195,10 @@ def generate_employee_qr(employee_id):
             mimetype="application/json"
         )
 
+
+
+
+
 # @frappe.whitelist(allow_guest=False)
 # def get_location_full_details(location_name):
 #     try:
@@ -273,6 +277,7 @@ def generate_employee_qr(employee_id):
 #                 filters={
 #                     "custom_asset":                  asset["name"],
 #                     "custom_asset_maintenance_type": "Reactive",
+#                     "docstatus":                     ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
 #                 },
 #                 fields=[
 #                     "name",
@@ -295,6 +300,7 @@ def generate_employee_qr(employee_id):
 #                 filters={
 #                     "asset_name":                    asset["asset_name"],
 #                     "custom_asset_maintenance_type": "Planned",
+#                     "docstatus":                     ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
 #                 },
 #                 fields=[
 #                     "name",
@@ -316,6 +322,27 @@ def generate_employee_qr(employee_id):
 #             enriched_logs = []
 #             for log in all_logs:
 #                 log_dict = dict(log)
+
+#                 maintenance_kind = log_dict.get("custom_asset_maintenance_type")
+
+#                 if maintenance_kind == "Reactive":
+#                     # Reactive logs only carry custom_maintenance_types; drop maintenance_type
+#                     log_dict.pop("maintenance_type", None)
+
+#                     # Reactive logs have no task; always null out task_name
+#                     log_dict["task_name"] = None
+
+#                     # assign_to_name is sourced from custom_assign_to for Reactive logs,
+#                     # but the output parameter name stays "assign_to_name" in both cases
+#                     log_dict["assign_to_name"] = log_dict.get("custom_assign_to")
+#                     log_dict.pop("custom_assign_to", None)
+
+#                 elif maintenance_kind == "Planned":
+#                     # Planned logs only carry maintenance_type; drop custom_maintenance_types
+#                     log_dict.pop("custom_maintenance_types", None)
+
+#                     # task_name and assign_to_name are already sourced correctly
+#                     # from their respective fields for Planned logs.
 
 #                 stock_items = frappe.get_all(
 #                     "Stock Items For Asset",
@@ -375,7 +402,9 @@ def generate_employee_qr(employee_id):
 #             status=500,
 #             mimetype="application/json",
 #         )
-
+import json
+import frappe
+from werkzeug.wrappers import Response
 
 
 @frappe.whitelist(allow_guest=False)
@@ -461,7 +490,7 @@ def get_location_full_details(location_name):
                 fields=[
                     "name",
                     "asset_name",
-                    "task_name",
+                    "custom_name_of_task",   # Reactive task name lives here
                     "maintenance_status",
                     "maintenance_type",
                     "custom_maintenance_types",
@@ -484,7 +513,7 @@ def get_location_full_details(location_name):
                 fields=[
                     "name",
                     "asset_name",
-                    "task_name",
+                    "task",   # Planned task name lives here (not task_name)
                     "maintenance_status",
                     "maintenance_type",
                     "custom_maintenance_types",
@@ -508,8 +537,10 @@ def get_location_full_details(location_name):
                     # Reactive logs only carry custom_maintenance_types; drop maintenance_type
                     log_dict.pop("maintenance_type", None)
 
-                    # Reactive logs have no task; always null out task_name
-                    log_dict["task_name"] = None
+                    # task_name is sourced from custom_name_of_task for Reactive logs,
+                    # but the output key stays "task_name" in both cases
+                    log_dict["task_name"] = log_dict.get("custom_name_of_task")
+                    log_dict.pop("custom_name_of_task", None)
 
                     # assign_to_name is sourced from custom_assign_to for Reactive logs,
                     # but the output parameter name stays "assign_to_name" in both cases
@@ -520,8 +551,13 @@ def get_location_full_details(location_name):
                     # Planned logs only carry maintenance_type; drop custom_maintenance_types
                     log_dict.pop("custom_maintenance_types", None)
 
-                    # task_name and assign_to_name are already sourced correctly
-                    # from their respective fields for Planned logs.
+                    # task_name is sourced from "task" for Planned logs,
+                    # but the output key stays "task_name" in both cases
+                    log_dict["task_name"] = log_dict.get("task")
+                    log_dict.pop("task", None)
+
+                    # assign_to_name is already sourced correctly from its own
+                    # field for Planned logs — no remapping needed.
 
                 stock_items = frappe.get_all(
                     "Stock Items For Asset",
@@ -537,6 +573,18 @@ def get_location_full_details(location_name):
                     ],
                 )
                 log_dict["custom_items"] = stock_items
+
+                # ── 6e: task_id → ToDo linked to this Asset Maintenance Log ────
+                task_id = frappe.db.get_value(
+                    "ToDo",
+                    {
+                        "reference_type": "Asset Maintenance Log",
+                        "reference_name": log["name"],
+                    },
+                    "name",
+                )
+                log_dict["task_id"] = task_id
+
                 enriched_logs.append(log_dict)
 
             asset_dict["maintenance_logs"] = enriched_logs
@@ -581,7 +629,6 @@ def get_location_full_details(location_name):
             status=500,
             mimetype="application/json",
         )
-
 @frappe.whitelist(allow_guest=True)
 def generate_and_send_otp(mobile_no):
     try:
