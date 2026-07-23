@@ -1,0 +1,35 @@
+{
+ "attach_files": "",
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "(doc.custom_assign_to or doc.assign_to_name) and doc.custom_employee_work_status in [\"New\", \"In Progress\", \"On Hold\"]",
+ "condition_type": "Python",
+ "creation": "2026-07-22 11:30:48.018797",
+ "date_changed": "creation",
+ "days_in_advance": 3,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Asset Maintenance Log",
+ "enabled": 1,
+ "event": "Days After",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "<p>Dear Supervisor,</p>\n    <p>\n    {% if doc.custom_employee_work_status == \"New\" %}\n    The complaint <b>{{ doc.name }}</b> assigned to {{ doc.assign_to_name or doc.custom_assign_to }} has not been attended for 3 days.\n    {% else %}\n    The work order <b>{{ doc.name }}</b> assigned to {{ doc.assign_to_name or doc.custom_assign_to }} is still \"{{ doc.custom_employee_work_status }}\" and has not been completed within 3 days.\n    {% endif %}\n    </p>\n    <p>Please follow up.</p>",
+ "message_type": "HTML",
+ "minutes_offset": 0,
+ "modified": "2026-07-22 11:30:48.018797",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "Escalate Unattended Asset Maintenance to Supervisor",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_role": "Supervisor"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "malavika@htsqatar.com",
+ "sender_email": "malavika@htsqatar.com",
+ "subject": "{{ doc.name }} - {% if doc.custom_employee_work_status == \"New\" %}Not Attended{% else %}Not Completed{% endif %}"
+}

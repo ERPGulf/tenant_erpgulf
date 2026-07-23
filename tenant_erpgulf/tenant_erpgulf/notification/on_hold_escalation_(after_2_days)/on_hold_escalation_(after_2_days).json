@@ -1,0 +1,35 @@
+{
+ "attach_files": "",
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "doc.custom_employee_work_status == \"On Hold\"",
+ "condition_type": "Python",
+ "creation": "2026-07-22 11:38:26.960065",
+ "date_changed": "creation",
+ "days_in_advance": 2,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Asset Maintenance Log",
+ "enabled": 1,
+ "event": "Days After",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "<p>Dear Supervisor,</p>\n    <p>\n    The work order <b>{{ doc.name }}</b> assigned to {{ doc.assign_to_name or doc.custom_assign_to }} has been <b>On Hold</b> for more than 2 days.\n    </p>\n    <p>Please review and follow up.</p>",
+ "message_type": "HTML",
+ "minutes_offset": 0,
+ "modified": "2026-07-22 11:38:26.960065",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "On Hold Escalation (after 2 days)",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_role": "Supervisor"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "malavika@htsqatar.com",
+ "sender_email": "malavika@htsqatar.com",
+ "subject": "{{ doc.name }} - On Hold Escalation"
+}
