@@ -11,7 +11,7 @@ http:
     data:
       - name: username
         type: text
-        value: Administrator
+        value: administrator@erpgulf.com
       - name: password
         type: text
         value: Friday2000@T
@@ -20,7 +20,7 @@ http:
         value: dGVuYW50X2VycGd1bGY=
   auth:
     type: bearer
-    token: ""
+    token: Dj8UVTzK0WbSlEEuMSP9xqVUsZRidi
 
 settings:
   encodeUrl: true

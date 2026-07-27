@@ -265,6 +265,13 @@ function fetch_customer_from_location(frm, location) {
 
 // ── Create Quotation from Asset Maintenance Log ──
 function create_quotation_from_maintenance(frm) {
+    const has_item = (frm.doc.custom_items || []).some(row => row.item_code);
+
+    if (!has_item) {
+        frappe.msgprint(__('Please select at least one item before creating a Quotation.'));
+        return;
+    }
+
     do_create_quotation(frm);
 }
 

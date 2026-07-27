@@ -540,8 +540,200 @@ def get_employee_task_detail(task_id):
         )
 
 
+# @frappe.whitelist(allow_guest=False)
+# def update_employee_task_status(task_id, status, date=None, reason=None):
+#     """
+#     Update the Employee Work Status on the Asset Maintenance Log linked to a ToDo.
+
+#     Args:
+#         task_id : ToDo document name (e.g. "dhb3c0s6dn")
+#         status  : One of "in_progress" | "on_hold" | "completed"
+#         date    : Optional date string (YYYY-MM-DD). Only applied to completion_date
+#                   when status == "completed". Ignored for all other statuses.
+#         reason  : Required when status == "on_hold" (reason for the hold).
+#                   Ignored for all other statuses.
+#     """
+#     try:
+#         # ── STEP 1: Auth ───────────────────────────────────────────────────────
+#         current_user = frappe.session.user
+#         if not current_user or current_user == "Guest":
+#             return Response(
+#                 json.dumps({"status": "error", "message": "Unauthorized. Please provide a valid Bearer token."}),
+#                 status=401, mimetype="application/json",
+#             )
+
+#         # ── STEP 2: Validate + map incoming status ─────────────────────────────
+#         # API accepts: in_progress | on_hold | completed
+#         # Stored in doctype as: In Progress | On Hold | Completed
+#         STATUS_MAP = {
+#             "in_progress": "In Progress",
+#             "on_hold":     "On Hold",
+#             "completed":   "Completed",
+#         }
+
+#         status_key = (status or "").strip().lower()
+#         if status_key not in STATUS_MAP:
+#             return Response(
+#                 json.dumps({
+#                     "status":  "error",
+#                     "message": f"Invalid status '{status}'. Allowed values: {list(STATUS_MAP.keys())}",
+#                 }),
+#                 status=400, mimetype="application/json",
+#             )
+
+#         db_status = STATUS_MAP[status_key]
+
+#         # ── STEP 2b: Reason is required for on_hold, ignored otherwise ─────────
+#         reason = (reason or "").strip() if reason else ""
+#         if status_key == "on_hold" and not reason:
+#             return Response(
+#                 json.dumps({
+#                     "status":  "error",
+#                     "message": "Reason is required when status is 'on_hold'.",
+#                 }),
+#                 status=400, mimetype="application/json",
+#             )
+
+#         # ── STEP 3: Fetch the ToDo ─────────────────────────────────────────────
+#         if not frappe.db.exists("ToDo", task_id):
+#             return Response(
+#                 json.dumps({"status": "error", "message": f"Task '{task_id}' not found"}),
+#                 status=404, mimetype="application/json",
+#             )
+
+#         todo = frappe.db.get_value(
+#             "ToDo",
+#             task_id,
+#             ["name", "reference_name", "reference_type", "allocated_to"],
+#             as_dict=True,
+#         )
+
+#         # ── STEP 4: Verify task belongs to this user ───────────────────────────
+#         if todo.get("allocated_to") != current_user:
+#             return Response(
+#                 json.dumps({"status": "error", "message": "You do not have access to this task."}),
+#                 status=403, mimetype="application/json",
+#             )
+
+#         # ── STEP 5: Resolve the Asset Maintenance Log ───────────────────────────
+#         # reference_type on the ToDo can be either:
+#         #   - "Asset Maintenance Log"  → reference_name IS the log, use directly
+#         #   - "Asset Maintenance"      → reference_name is the parent; find the
+#         #                                log linked to it via `asset_maintenance`
+#         ref_name = todo.get("reference_name")
+#         ref_type = todo.get("reference_type")
+
+#         if ref_type not in ("Asset Maintenance Log", "Asset Maintenance"):
+#             return Response(
+#                 json.dumps({"status": "error", "message": "This task is not linked to an Asset Maintenance Log."}),
+#                 status=400, mimetype="application/json",
+#             )
+
+#         aml_name = None
+
+#         if ref_type == "Asset Maintenance Log":
+#             if ref_name and frappe.db.exists("Asset Maintenance Log", ref_name):
+#                 aml_name = ref_name
+
+#         elif ref_type == "Asset Maintenance":
+#             if ref_name and frappe.db.exists("Asset Maintenance", ref_name):
+#                 matching_logs = frappe.get_all(
+#                     "Asset Maintenance Log",
+#                     filters={"asset_maintenance": ref_name, "custom_assign_to": current_user},
+#                     fields=["name"],
+#                     order_by="creation desc",
+#                     limit_page_length=1,
+#                 )
+#                 if not matching_logs:
+#                     matching_logs = frappe.get_all(
+#                         "Asset Maintenance Log",
+#                         filters={"asset_maintenance": ref_name},
+#                         fields=["name"],
+#                         order_by="creation desc",
+#                         limit_page_length=1,
+#                     )
+#                 if matching_logs:
+#                     aml_name = matching_logs[0]["name"]
+
+#         # ── STEP 6: Fetch the Asset Maintenance Log ────────────────────────────
+#         if not aml_name or not frappe.db.exists("Asset Maintenance Log", aml_name):
+#             return Response(
+#                 json.dumps({"status": "error", "message": f"Asset Maintenance Log for reference '{ref_name}' not found"}),
+#                 status=404, mimetype="application/json",
+#             )
+
+#         aml = frappe.get_doc("Asset Maintenance Log", aml_name)
+
+#         # ── STEP 7: Update custom_employee_work_status ─────────────────────────
+#         aml.custom_employee_work_status = db_status
+
+#         # ── STEP 7b: On hold → store the reason. Clear it once status moves on.
+#         if status_key == "on_hold":
+#             aml.custom_hold_reason = reason
+#         else:
+#             aml.custom_hold_reason = None
+
+#         # ── STEP 8: If Completed → also update maintenance_status + completion_date
+#         if status_key == "completed":
+#             aml.maintenance_status = "Completed"
+#             if date:
+#                 aml.completion_date = date
+#             else:
+#                 # fallback to today if no date provided
+#                 aml.completion_date = frappe.utils.nowdate()
+
+#         # ── STEP 9: Save (no submit, no validation bypass) ────────────────────
+#         aml.save(ignore_permissions=True)
+#         frappe.db.commit()
+
+#         frappe.log_error(
+#             title="[update_employee_task_status] SUCCESS",
+#             message=f"task_id={task_id} | aml={aml_name} | status={db_status} | date={date} | reason={reason}"
+#         )
+
+#         # ── STEP 10: Build response ────────────────────────────────────────────
+#         response_data = {
+#             "status":  "success",
+#             "message": f"Task status updated to '{db_status}' successfully.",
+#             "data": {
+#                 "taskId":               task_id,
+#                 "maintenanceLogId":     aml_name,
+#                 "employeeWorkStatus":   db_status,
+#                 "maintenanceStatus":    aml.maintenance_status,
+#                 "completionDate":       str(aml.completion_date) if aml.completion_date else None,
+#                 "holdReason":           aml.custom_hold_reason,
+#             }
+#         }
+
+#         return Response(
+#             json.dumps(response_data, default=str),
+#             status=200,
+#             mimetype="application/json",
+#         )
+
+#     except frappe.ValidationError as e:
+#         return Response(
+#             json.dumps({"status": "error", "message": str(e)}),
+#             status=400, mimetype="application/json",
+#         )
+
+#     except frappe.PermissionError:
+#         return Response(
+#             json.dumps({"status": "error", "message": "You do not have permission to perform this action."}),
+#             status=403, mimetype="application/json",
+#         )
+
+#     except Exception as e:
+#         frappe.log_error(
+#             title="update_employee_task_status error",
+#             message=frappe.get_traceback()
+#         )
+#         return Response(
+#             json.dumps({"status": "error", "message": str(e)}),
+#             status=500, mimetype="application/json",
+#         )
 @frappe.whitelist(allow_guest=False)
-def update_employee_task_status(task_id, status, date=None, reason=None):
+def update_employee_task_status(task_id, status, date=None, reason=None, note=None):
     """
     Update the Employee Work Status on the Asset Maintenance Log linked to a ToDo.
 
@@ -552,6 +744,9 @@ def update_employee_task_status(task_id, status, date=None, reason=None):
                   when status == "completed". Ignored for all other statuses.
         reason  : Required when status == "on_hold" (reason for the hold).
                   Ignored for all other statuses.
+        note    : Optional free-text note. Not mandatory, valid for any status.
+                  Stored on Asset Maintenance Log as `custom_note`. If omitted,
+                  the existing note (if any) is left untouched.
     """
     try:
         # ── STEP 1: Auth ───────────────────────────────────────────────────────
@@ -593,6 +788,9 @@ def update_employee_task_status(task_id, status, date=None, reason=None):
                 }),
                 status=400, mimetype="application/json",
             )
+
+        # ── STEP 2c: Note is optional, valid for any status ────────────────────
+        note = note.strip() if isinstance(note, str) else note
 
         # ── STEP 3: Fetch the ToDo ─────────────────────────────────────────────
         if not frappe.db.exists("ToDo", task_id):
@@ -673,6 +871,11 @@ def update_employee_task_status(task_id, status, date=None, reason=None):
         else:
             aml.custom_hold_reason = None
 
+        # ── STEP 7c: Note is independent of status. Only touch it if provided;
+        #             leave the existing note untouched when omitted.
+        if note:
+            aml.custom_note = note
+
         # ── STEP 8: If Completed → also update maintenance_status + completion_date
         if status_key == "completed":
             aml.maintenance_status = "Completed"
@@ -688,7 +891,7 @@ def update_employee_task_status(task_id, status, date=None, reason=None):
 
         frappe.log_error(
             title="[update_employee_task_status] SUCCESS",
-            message=f"task_id={task_id} | aml={aml_name} | status={db_status} | date={date} | reason={reason}"
+            message=f"task_id={task_id} | aml={aml_name} | status={db_status} | date={date} | reason={reason} | note={note}"
         )
 
         # ── STEP 10: Build response ────────────────────────────────────────────
@@ -702,6 +905,7 @@ def update_employee_task_status(task_id, status, date=None, reason=None):
                 "maintenanceStatus":    aml.maintenance_status,
                 "completionDate":       str(aml.completion_date) if aml.completion_date else None,
                 "holdReason":           aml.custom_hold_reason,
+                "note":                 aml.custom_note,
             }
         }
 
