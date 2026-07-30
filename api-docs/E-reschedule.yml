@@ -1,7 +1,7 @@
 info:
   name: E-reschedule
   type: http
-  seq: 24
+  seq: 23
 
 http:
   method: GET
@@ -11,7 +11,7 @@ http:
     data:
       - name: asset_maintenance_log_id
         type: text
-        value: ACC-AML-2026-00150
+        value: ACC-AML-2026-00187
       - name: remarks
         type: text
         value: Customer requested a later time slot
@@ -21,9 +21,12 @@ http:
       - name: is_rescheduled
         type: text
         value: "1"
+      - name: scheduled_date
+        type: text
+        value: 2026-07-26 09:03:57
   auth:
     type: bearer
-    token: 3xEfoy84N5MeMTwGRZAvqtX4EqqFm7
+    token: 9yLDHVYFPx1Kl3AXGm1UdPDegSgZNk
 
 settings:
   encodeUrl: true

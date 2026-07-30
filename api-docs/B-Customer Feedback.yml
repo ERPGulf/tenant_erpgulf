@@ -1,7 +1,7 @@
 info:
   name: B-Customer Feedback
   type: http
-  seq: 23
+  seq: 22
 
 http:
   method: GET
@@ -11,7 +11,7 @@ http:
     data:
       - name: asset_maintenance_log_id
         type: text
-        value: ACC-AML-2026-00072
+        value: ACC-AML-2026-00169
       - name: star_rating
         type: text
         value: "5"
@@ -20,7 +20,7 @@ http:
         value: good
   auth:
     type: bearer
-    token: S2vvupmxP6CclkuhvEIfHgHyGmzOT3
+    token: ""
 
 settings:
   encodeUrl: true

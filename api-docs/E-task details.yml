@@ -1,7 +1,7 @@
 info:
   name: E-task details
   type: http
-  seq: 18
+  seq: 17
 
 http:
   method: GET
@@ -11,10 +11,10 @@ http:
     data:
       - name: task_id
         type: text
-        value: 71d63njv97
+        value: pmsq9b392b
   auth:
     type: bearer
-    token: IsJmORgp5MXMn6fN5OOSqTBmOGGPea
+    token: ""
 
 settings:
   encodeUrl: true

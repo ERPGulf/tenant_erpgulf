@@ -1,7 +1,7 @@
 info:
   name: B-create refresh token
   type: http
-  seq: 20
+  seq: 19
 
 http:
   method: GET
@@ -14,7 +14,7 @@ http:
         value: TB4ql5CpRfTOxC8w6wz2TywYqZS9eU
   auth:
     type: bearer
-    token: eiNpNWzdHgp6NlqiQQZfLTiVDBKTa6
+    token: ""
 
 settings:
   encodeUrl: true

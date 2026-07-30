@@ -12,9 +12,12 @@ http:
       - name: location_name
         type: text
         value: xyz
+      - name: task_id
+        type: text
+        value: vgg5fulvhb
   auth:
     type: bearer
-    token: jqcUy1TFnbQKmJE5HbKfp95zAasdp2
+    token: 9yLDHVYFPx1Kl3AXGm1UdPDegSgZNk
 
 settings:
   encodeUrl: true

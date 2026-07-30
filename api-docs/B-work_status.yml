@@ -1,7 +1,7 @@
 info:
   name: B-work_status
   type: http
-  seq: 14
+  seq: 13
 
 http:
   method: GET
@@ -11,10 +11,10 @@ http:
     data:
       - name: request_id
         type: text
-        value: p2150k8b1k
+        value: MR-2026-07-16-002
   auth:
     type: bearer
-    token: 25yVGjpRf4pXeZxBE5lzuPI77XJ9wZ
+    token: ""
 
 settings:
   encodeUrl: true

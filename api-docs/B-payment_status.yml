@@ -1,7 +1,7 @@
 info:
   name: B-payment_status
   type: http
-  seq: 16
+  seq: 15
 
 http:
   method: POST
@@ -17,7 +17,7 @@ http:
         value: "true"
   auth:
     type: bearer
-    token: g7tgtrjiEiQDXduAsmYcuy54wn6kOm
+    token: ""
 
 settings:
   encodeUrl: true

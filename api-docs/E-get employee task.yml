@@ -1,14 +1,14 @@
 info:
   name: E-get employee task
   type: http
-  seq: 17
+  seq: 16
 
 http:
   method: GET
   url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.task.get_employee_tasks
   auth:
     type: bearer
-    token: vlZXItsnaiAtnCuasoVln44yMr6rOX
+    token: ""
 
 settings:
   encodeUrl: true

@@ -1,7 +1,7 @@
 info:
   name: B-get quotation detailsof 1 quotation
   type: http
-  seq: 21
+  seq: 20
 
 http:
   method: GET
@@ -14,7 +14,7 @@ http:
         value: SAL-QTN-2026-00050
   auth:
     type: bearer
-    token: 6xKVrRPZraHjKbBu1MggdQqmvGdBP6
+    token: ""
 
 settings:
   encodeUrl: true

@@ -1,0 +1,29 @@
+info:
+  name: B-add_supervisor_alert
+  type: http
+  seq: 25
+
+http:
+  method: GET
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.supervisor_alerts.add_supervisor_alert
+  body:
+    type: multipart-form
+    data:
+      - name: asset_maintenance_log
+        type: text
+        value: ACC-AML-2026-00168
+      - name: title
+        type: text
+        value: SDFSFSAD
+      - name: description
+        type: text
+        value: description
+  auth:
+    type: bearer
+    token: ""
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

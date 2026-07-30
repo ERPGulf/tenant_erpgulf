@@ -1,0 +1,9 @@
+<p>Dear Supervisor,</p>
+    <p>
+    {% if doc.custom_employee_work_status == "New" %}
+    The complaint <b>{{ doc.name }}</b> assigned to {{ doc.assign_to_name or doc.custom_assign_to }} has not been attended for 3 days.
+    {% else %}
+    The work order <b>{{ doc.name }}</b> assigned to {{ doc.assign_to_name or doc.custom_assign_to }} is still "{{ doc.custom_employee_work_status }}" and has not been completed within 3 days.
+    {% endif %}
+    </p>
+    <p>Please follow up.</p>

@@ -1,7 +1,7 @@
 info:
   name: B-quotation_aprov
   type: http
-  seq: 15
+  seq: 14
 
 http:
   method: POST
@@ -11,13 +11,13 @@ http:
     data:
       - name: quotation_id
         type: text
-        value: SAL-QTN-2026-00054
+        value: SAL-QTN-2026-00091
       - name: is_approved
         type: text
         value: "true"
   auth:
     type: bearer
-    token: 9s2zH2vHjcjeLiHWK5NQUvik82KA8h
+    token: ""
 
 settings:
   encodeUrl: true

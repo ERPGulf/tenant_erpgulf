@@ -15,8 +15,9 @@
  "is_standard": 1,
  "message": "<p>Dear Customer,</p>\n<p>Your maintenance visit has been rescheduled.</p>\n{% for row in doc.custom_reschedule_history_table %}\n{% if row.is_rescheduled and row.scheduled_date %}\n<p><b>New Scheduled Date:</b> {{ row.scheduled_date }}<br>\n<b>Remarks:</b> {{ row.remarks or \"-\" }}</p>\n{% endif %}\n{% endfor %}\n<p>Regards,<br>Support Team</p>",
  "message_type": "HTML",
+ "method": "",
  "minutes_offset": 0,
- "modified": "2026-07-13 16:55:24.064035",
+ "modified": "2026-07-21 20:07:18.998984",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Reschedule Alert to Customer",
@@ -24,7 +25,7 @@
  "recipients": [
   {
    "receiver_by_document_field": "custom__customer_email",
-   "receiver_by_role": "Customer"
+   "receiver_by_role": ""
   }
  ],
  "send_system_notification": 1,

@@ -1,7 +1,7 @@
 info:
   name: E-Employee work status update
   type: http
-  seq: 22
+  seq: 21
 
 http:
   method: GET
@@ -11,16 +11,22 @@ http:
     data:
       - name: task_id
         type: text
-        value: c9iu5vdghe
+        value: fmdktasmrt
       - name: status
         type: text
-        value: completed
+        value: in_progress
       - name: date
         type: text
         value: 2026-07-31
+      - name: reason
+        type: text
+        value: ""
+      - name: note
+        type: text
+        value: xcsddc
   auth:
     type: bearer
-    token: IsJmORgp5MXMn6fN5OOSqTBmOGGPea
+    token: tEVo9JwacnoiFLyqK8GoQGk0YKtgTt
 
 settings:
   encodeUrl: true

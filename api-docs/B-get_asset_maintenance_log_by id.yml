@@ -14,7 +14,7 @@ http:
         value: ACC-AML-2026-00142
   auth:
     type: bearer
-    token: YgGRgn9BObM1WoFahAHphNOFYmtfbP
+    token: ""
 
 settings:
   encodeUrl: true

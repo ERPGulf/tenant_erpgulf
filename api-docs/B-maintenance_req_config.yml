@@ -14,7 +14,7 @@ http:
         value: customer test
   auth:
     type: bearer
-    token: P35q3g2oNYDiO1B8dDAz0BOy3CoVNZ
+    token: ""
 
 settings:
   encodeUrl: true

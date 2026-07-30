@@ -1,0 +1,13 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Client Script",
+  "dt": "Quotation",
+  "enabled": 1,
+  "modified": "2026-07-15 09:18:03.042210",
+  "module": "tenant_erpgulf",
+  "name": "Quotation Approval",
+  "script": "frappe.ui.form.on(\"Quotation\", {\n    after_save: function(frm) {\n        if (frm.doc.custom_quotation_status === \"Approved\") {\n            frappe.db.get_list(\"Asset Maintenance Log\", {\n                filters: { custom_quotation: frm.doc.name },\n                fields: [\"name\"]\n            }).then((logs) => {\n                logs.forEach((log) => {\n                    frappe.db.set_value(\n                        \"Asset Maintenance Log\",\n                        log.name,\n                        \"custom_quotation_status\",\n                        \"Quotation approved\"\n                    );\n                });\n            });\n        }\n    }\n});",
+  "view": "Form"
+ }
+]

@@ -266,6 +266,7 @@ doc_events = {
     },
     "Asset Maintenance Log": {
         "on_submit": "tenant_erpgulf.asset.on_submit",
+        "validate": "tenant_erpgulf.reschedule_validation.validate_reschedule_history"
     },
     "Employee": {
         "on_update": "tenant_erpgulf.employee.create_qr_code",
@@ -281,3 +282,31 @@ doctype_js = {
     "Maintenance Request":"public/js/maintenance_request.js"
 
 }
+scheduler_events = {
+    "cron": {
+        "37 8 * * *": [  # 8:30 PM every night
+            "tenant_erpgulf.notification.auto_cancel_overdue_maintenance_logs"
+        ]
+    }
+}
+
+fixtures = [
+    {
+        "dt": "Custom Field",
+        "filters": [
+            ["module", "=", "tenant_erpgulf"]
+        ]
+    },
+    {
+        "dt": "Client Script",
+        "filters": [
+            ["module", "=", "tenant_erpgulf"]
+        ]
+    },
+    {
+        "dt": "Server Script",
+        "filters": [
+            ["module", "=", "tenant_erpgulf"]
+        ]
+    }
+]

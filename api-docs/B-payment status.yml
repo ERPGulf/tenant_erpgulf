@@ -1,7 +1,7 @@
 info:
   name: B-payment status
   type: http
-  seq: 19
+  seq: 18
 
 http:
   method: GET
@@ -14,7 +14,7 @@ http:
         value: customer test
   auth:
     type: bearer
-    token: 6xKVrRPZraHjKbBu1MggdQqmvGdBP6
+    token: ""
 
 settings:
   encodeUrl: true

@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "BLDNG-.####",
  "creation": "2026-05-22 09:39:29.753027",
@@ -37,7 +38,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-22 09:42:04.120750",
+ "modified": "2026-07-15 14:26:01.230488",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Building",

@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "CMPND-.####",
  "creation": "2026-05-22 09:32:43.931818",
@@ -51,7 +52,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-22 10:05:07.023174",
+ "modified": "2026-07-15 14:26:26.272162",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Compound",
