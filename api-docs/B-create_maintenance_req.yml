@@ -23,10 +23,11 @@ http:
         value: Master Bed Room
       - name: asset
         type: text
-        value: ACC-ASS-2026-00003
+        value: ACC-ASS-2026-00031
+        disabled: true
       - name: location
         type: text
-        value: adc
+        value: T1-GF-ENTRY-RAMP
       - name: description
         type: text
         value: Electrical portable appliance testing
@@ -48,6 +49,12 @@ http:
       - name: maintenance_date
         type: text
         value: 2026-07-20
+      - name: maintenance_scope
+        type: text
+        value: Unit
+      - name: scope_reference
+        type: text
+        value: unit 123
   auth:
     type: bearer
     token: ""

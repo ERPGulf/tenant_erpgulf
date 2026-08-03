@@ -270,6 +270,9 @@ doc_events = {
     },
     "Employee": {
         "on_update": "tenant_erpgulf.employee.create_qr_code",
+    },
+    "Location": {
+        "after_insert": "tenant_erpgulf.location_qr.create_location_qr"
     }
 }
 override_doctype_class = {

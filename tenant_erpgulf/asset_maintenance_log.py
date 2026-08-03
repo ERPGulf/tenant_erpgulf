@@ -80,23 +80,6 @@
 #             if not self.get("custom_assign_to"):
 #                 return
 
-#             # ── Avoid duplicate: delete existing open ToDo for this log ────────
-#             existing = frappe.db.get_value(
-#                 "ToDo",
-#                 {
-#                     "reference_type": "Asset Maintenance Log",
-#                     "reference_name": self.name,
-#                     "status":         "Open",
-#                 },
-#                 "name",
-#             )
-#             if existing:
-#                 frappe.delete_doc("ToDo", existing, ignore_permissions=True)
-#                 frappe.log_error(
-#                     title="[Reactive] on_update — old ToDo deleted",
-#                     message=f"deleted={existing} | doc={self.name}"
-#                 )
-
 #             # ── Determine task name based on maintenance type ───────────────────
 #             if self.custom_asset_maintenance_type == "Reactive":
 #                 task_name = self.get("custom_name_of_task") or ""
@@ -117,22 +100,44 @@
 #                 quotation   = self.get("custom_quotation") or "",
 #             )
 
-#             todo = frappe.get_doc({
-#                 "doctype":        "ToDo",
-#                 "reference_type": "Asset Maintenance Log",
-#                 "reference_name": self.name,
-#                 "description":    description,
-#                 "priority":       "Medium",
-#                 "status":         "Open",
-#                 "date":           self.get("due_date") or frappe.utils.nowdate(),
-#                 "allocated_to":   self.get("custom_assign_to"),
-#             })
-#             todo.insert(ignore_permissions=True)
-
-#             frappe.log_error(
-#                 title="[Reactive] on_update — ToDo CREATED",
-#                 message=f"todo={todo.name} | assigned_to={self.get('custom_assign_to')} | doc={self.name}"
+#             # ── Check if a ToDo already exists for this log ────────────────────
+#             existing = frappe.db.get_value(
+#                 "ToDo",
+#                 {
+#                     "reference_type": "Asset Maintenance Log",
+#                     "reference_name": self.name,
+#                 },
+#                 "name",
 #             )
+
+#             if existing:
+#                 # ── Update in place — preserve the same ToDo ID ────────────────
+#                 todo = frappe.get_doc("ToDo", existing)
+#                 todo.description  = description
+#                 todo.date         = self.get("due_date") or frappe.utils.nowdate()
+#                 todo.allocated_to = self.get("custom_assign_to")
+#                 todo.save(ignore_permissions=True)
+#                 frappe.log_error(
+#                     title="[Reactive] on_update — ToDo UPDATED (same ID)",
+#                     message=f"todo={existing} | assigned_to={self.get('custom_assign_to')} | doc={self.name}"
+#                 )
+#             else:
+#                 # ── First save: create the ToDo ────────────────────────────────
+#                 todo = frappe.get_doc({
+#                     "doctype":        "ToDo",
+#                     "reference_type": "Asset Maintenance Log",
+#                     "reference_name": self.name,
+#                     "description":    description,
+#                     "priority":       "Medium",
+#                     "status":         "Open",
+#                     "date":           self.get("due_date") or frappe.utils.nowdate(),
+#                     "allocated_to":   self.get("custom_assign_to"),
+#                 })
+#                 todo.insert(ignore_permissions=True)
+#                 frappe.log_error(
+#                     title="[Reactive] on_update — ToDo CREATED",
+#                     message=f"todo={todo.name} | assigned_to={self.get('custom_assign_to')} | doc={self.name}"
+#                 )
 
 #         except Exception:
 #             frappe.log_error(
@@ -497,7 +502,6 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
             if self.custom_asset_maintenance_type == "Reactive":
                 if not getattr(self, "_reactive_patched", False):
                     self._patch_reactive_fields()
-            # Planned — no override, ERPNext default before_submit runs via super()
         except Exception:
             frappe.log_error(
                 title="[Reactive] before_submit FAILED",
@@ -506,29 +510,21 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
             raise
 
     def on_update(self):
-        """
-        Reactive → create ToDo on save (docstatus=0) only.
-        Planned  → do nothing here, ERPNext handles ToDo on submit.
-        """
         try:
             if self.custom_asset_maintenance_type != "Reactive":
-                # Planned: let ERPNext default behaviour handle everything
                 return
 
-            # Reactive: only create ToDo when draft (docstatus=0)
             if self.docstatus != 0:
                 return
 
             if not self.get("custom_assign_to"):
                 return
 
-            # ── Determine task name based on maintenance type ───────────────────
             if self.custom_asset_maintenance_type == "Reactive":
                 task_name = self.get("custom_name_of_task") or ""
             else:
                 task_name = self.get("task_name") or ""
 
-            # ── Build description ──────────────────────────────────────────────
             description = """
                 <b>Reactive Maintenance Task</b><br>
                 <b>Asset:</b> {asset}<br>
@@ -542,7 +538,6 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
                 quotation   = self.get("custom_quotation") or "",
             )
 
-            # ── Check if a ToDo already exists for this log ────────────────────
             existing = frappe.db.get_value(
                 "ToDo",
                 {
@@ -553,7 +548,6 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
             )
 
             if existing:
-                # ── Update in place — preserve the same ToDo ID ────────────────
                 todo = frappe.get_doc("ToDo", existing)
                 todo.description  = description
                 todo.date         = self.get("due_date") or frappe.utils.nowdate()
@@ -564,7 +558,6 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
                     message=f"todo={existing} | assigned_to={self.get('custom_assign_to')} | doc={self.name}"
                 )
             else:
-                # ── First save: create the ToDo ────────────────────────────────
                 todo = frappe.get_doc({
                     "doctype":        "ToDo",
                     "reference_type": "Asset Maintenance Log",
@@ -600,7 +593,6 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
                 frappe.throw(_("Maintenance Status has to be Cancelled or Completed to Submit"))
 
             if self.custom_asset_maintenance_type == "Reactive":
-                # ── Reactive: close existing ToDo, no new one created ──────────
                 frappe.log_error(
                     title="[Reactive] on_submit → closing ToDo + update_reactive_maintenance",
                     message=f"doc={self.name}"
@@ -609,8 +601,6 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
                 self.update_reactive_maintenance()
 
             else:
-                # ── Planned: ERPNext default on_submit behaviour ───────────────
-                # super().on_submit() creates ToDo + updates maintenance task
                 frappe.log_error(
                     title="[Planned] on_submit → calling super().on_submit()",
                     message=f"doc={self.name}"
@@ -662,59 +652,69 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
             title="[Reactive] _patch_reactive_fields START",
             message=f"doc={self.name} | custom_asset={self.get('custom_asset')} | "
                     f"company={self.get('company')} | asset_name={self.get('asset_name')} | "
-                    f"asset_maintenance={self.get('asset_maintenance')} | task={self.get('task')}"
+                    f"asset_maintenance={self.get('asset_maintenance')} | task={self.get('task')} | "
+                    f"scope={self.get('custom_maintenance_scope')}"
         )
         try:
             custom_asset = self.get("custom_asset")
+            scope = self.get("custom_maintenance_scope")
+            is_asset_scope = (not scope) or (scope == "Asset")
 
-            if not custom_asset:
+            if custom_asset:
+                company = frappe.db.get_value("Asset", custom_asset, "company")
+
+                frappe.log_error(
+                    title="[Reactive] _patch_reactive_fields company FETCHED from Asset",
+                    message=f"custom_asset={custom_asset} | company={company}"
+                )
+
+                if not company:
+                    frappe.log_error(
+                        title="[Reactive] _patch_reactive_fields company NOT FOUND",
+                        message=f"Asset '{custom_asset}' has no company value"
+                    )
+                    frappe.throw(
+                        _("Could not find Company from Asset '{0}'. "
+                          "Please ensure the Asset has a Company set.").format(custom_asset)
+                    )
+
+                object.__setattr__(self, "company", company)
+
+                if not self.get("asset_name"):
+                    asset_name = frappe.db.get_value("Asset", custom_asset, "asset_name")
+                    if asset_name:
+                        object.__setattr__(self, "asset_name", asset_name)
+                        frappe.log_error(
+                            title="[Reactive] _patch_reactive_fields asset_name SET",
+                            message=f"asset_name={asset_name}"
+                        )
+
+            elif is_asset_scope:
                 frappe.log_error(
                     title="[Reactive] _patch_reactive_fields ABORT",
-                    message="custom_asset is empty — cannot fetch company"
+                    message="custom_asset is empty and scope is Asset — cannot fetch company"
                 )
                 frappe.throw(_("Please select an Asset before submitting."))
 
-            # ── Fetch company from Asset ───────────────────────────────────────
-            company = frappe.db.get_value("Asset", custom_asset, "company")
+            else:
+                company = frappe.defaults.get_global_default("company")
 
-            frappe.log_error(
-                title="[Reactive] _patch_reactive_fields company FETCHED",
-                message=f"custom_asset={custom_asset} | company={company}"
-            )
-
-            if not company:
                 frappe.log_error(
-                    title="[Reactive] _patch_reactive_fields company NOT FOUND",
-                    message=f"Asset '{custom_asset}' has no company value"
-                )
-                frappe.throw(
-                    _("Could not find Company from Asset '{0}'. "
-                      "Please ensure the Asset has a Company set.").format(custom_asset)
+                    title="[Reactive] _patch_reactive_fields company FETCHED from default",
+                    message=f"scope={scope} | default_company={company}"
                 )
 
-            # ── Set ONLY in memory ─────────────────────────────────────────────
-            object.__setattr__(self, "company", company)
-
-            frappe.log_error(
-                title="[Reactive] _patch_reactive_fields company SET in memory",
-                message=f"doc={self.name} | company={company}"
-            )
-
-            # ── Also ensure asset_name is set in memory ────────────────────────
-            if not self.get("asset_name"):
-                asset_name = frappe.db.get_value("Asset", custom_asset, "asset_name")
-                if asset_name:
-                    object.__setattr__(self, "asset_name", asset_name)
-                    frappe.log_error(
-                        title="[Reactive] _patch_reactive_fields asset_name SET",
-                        message=f"asset_name={asset_name}"
+                if not company:
+                    frappe.throw(
+                        _("No Asset is linked for this scope ({0}) and no default Company is "
+                          "configured. Please set a default Company or link an Asset.").format(scope)
                     )
 
-            # ── Nullify fields that trigger ERPNext company lookup chain ───────
+                object.__setattr__(self, "company", company)
+
             self.asset_maintenance = None
             self.task = None
 
-            # ── Mark as patched to avoid re-running in before_submit ───────────
             self._reactive_patched = True
 
             frappe.log_error(
@@ -733,7 +733,6 @@ class CustomAssetMaintenanceLog(AssetMaintenanceLog):
             raise
 
     def _close_reactive_todo(self):
-        """On submit, close the open ToDo for Reactive — do NOT create a new one."""
         try:
             todo_name = frappe.db.get_value(
                 "ToDo",

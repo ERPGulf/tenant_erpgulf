@@ -217,10 +217,6 @@ def get_customer_maintenance_data(customer_id):
     if not customer_id:
         frappe.throw(_("customer_id is required"), frappe.MandatoryError)
 
-    # ─────────────────────────────────────────────────────────────
-    # 1.  FLATS → ROOMS → ASSETS
-    # ─────────────────────────────────────────────────────────────
-
     flat_docs = frappe.get_all(
         "Location",
         filters={"custom_customer": customer_id},
@@ -273,8 +269,6 @@ def get_customer_maintenance_data(customer_id):
             }
         )
 
-
-
     priority_options = []
     try:
         meta = frappe.get_meta("Maintenance Request")
@@ -283,10 +277,6 @@ def get_customer_maintenance_data(customer_id):
             priority_options = [o.strip() for o in pf.options.split("\n") if o.strip()]
     except Exception:
         pass
-
-    # ─────────────────────────────────────────────────────────────
-    # 4.  MAINTENANCE TYPES — from Maintenance Type doctype
-    # ─────────────────────────────────────────────────────────────
 
     maintenance_types = []
     try:
@@ -299,9 +289,16 @@ def get_customer_maintenance_data(customer_id):
     except Exception:
         pass
 
-    # ─────────────────────────────────────────────────────────────
-    # 5.  RESPONSE
-    # ─────────────────────────────────────────────────────────────
+    maintenance_scope_options = []
+    try:
+        mr_meta = frappe.get_meta("Maintenance Request")
+        scope_field = mr_meta.get_field("custom_maintenance_scope")
+        if scope_field and scope_field.fieldtype == "Select" and scope_field.options:
+            maintenance_scope_options = [
+                o.strip() for o in scope_field.options.split("\n") if o.strip()
+            ]
+    except Exception:
+        pass
 
     return {
         "success": True,
@@ -309,59 +306,82 @@ def get_customer_maintenance_data(customer_id):
         "flats": flats,
         "priorityOptions": priority_options,
         "maintenanceTypes": maintenance_types,
+        "maintenanceScopeOptions": maintenance_scope_options,
     }
+
 import frappe
 from frappe import _
 
+VALID_SCOPES = {"Asset", "Unit", "Common Area", "Building", "Infrastructure", "Landscape"}
 
 
 @frappe.whitelist(allow_guest=False)
 def create_maintenance_request(
-    customer,
-    priority,
-    maintenance_type,
-    flat,
-    room,
-    asset,
-    location,
-    description,
-    phone_number,
-    maintenance_date,
-    time_slot,
+    customer=None,
+    priority=None,
+    maintenance_type=None,
+    flat=None,
+    room=None,
+    asset=None,                 # optional; omit entirely when scope != 'Asset'
+    location=None,
+    description=None,
+    phone_number=None,
+    maintenance_date=None,
+    time_slot=None,
+    maintenance_scope=None,     # one of VALID_SCOPES, validated below
+    scope_reference=None,       # required when maintenance_scope != 'Asset'
 ):
     """
     POST API to create a Maintenance Request with multiple file uploads.
 
     Send as form-data:
-      customer          → test customer
-      priority          → High
-      maintenance_type  → Preventive Maintenance
-      flat              → 203
-      room              → Master Bed Room
-      asset             → ACC-ASS-2026-00003
-      location          → adc
-      description       → abc
-      phone_number      → 8281693215
-      maintenance_date  → 2026-07-20
-      time_slot         → 10:00 AM - 12:00 PM
-      attachment_ids    → file1.jpg   (File type — select multiple files)
-      attachment_ids    → file2.jpg   (add same key again for multiple)
+      customer           → test customer
+      priority           → High
+      maintenance_type   → Preventive Maintenance
+      flat               → 203
+      room               → Master Bed Room
+      asset              → ACC-ASS-2026-00003   (required only if maintenance_scope = "Asset")
+      location           → adc
+      description        → abc
+      phone_number       → 8281693215
+      maintenance_date   → 2026-07-20
+      time_slot          → 10:00 AM - 12:00 PM
+      maintenance_scope  → Asset | Unit | Common Area | Building | Infrastructure | Landscape
+      scope_reference    → e.g. "Unit 203" / "Lobby Common Area"  (required if scope != "Asset")
+      attachment_ids     → file1.jpg   (File type — select multiple files)
+      attachment_ids     → file2.jpg   (add same key again for multiple)
     """
+
+    # ── Validate maintenance_scope value ──────────────────────────
+    if maintenance_scope not in VALID_SCOPES:
+        frappe.throw(
+            _("maintenance_scope must be one of: {0}").format(", ".join(sorted(VALID_SCOPES))),
+            frappe.ValidationError,
+        )
+
+    is_asset_scope = maintenance_scope == "Asset"
 
     # ── Validate required fields ──────────────────────────────────
     required = {
-        "customer":         customer,
-        "priority":         priority,
-        "maintenance_type": maintenance_type,
-        "flat":             flat,
-        "room":             room,
-        "asset":            asset,
-        "location":         location,
-        "description":      description,
-        "phone_number":     phone_number,
-        "maintenance_date": maintenance_date,
-        "time_slot":        time_slot,
+        "customer":          customer,
+        "priority":          priority,
+        "maintenance_type":  maintenance_type,
+        "flat":              flat,
+        "room":              room,
+        "location":          location,
+        "description":       description,
+        "phone_number":      phone_number,
+        "maintenance_date":  maintenance_date,
+        "time_slot":         time_slot,
+        "maintenance_scope": maintenance_scope,
     }
+
+    # 'asset' is conditionally required instead of always required
+    if is_asset_scope:
+        required["asset"] = asset
+    else:
+        required["scope_reference"] = scope_reference
+
     missing = [k for k, v in required.items() if not v]
     if missing:
         frappe.throw(
@@ -371,34 +391,46 @@ def create_maintenance_request(
 
     # ── Create the Maintenance Request doc ────────────────────────
     doc = frappe.new_doc("Maintenance Request")
-    doc.customer         = customer
-    doc.priority         = priority
-    doc.maintenance_type = maintenance_type
-    doc.flat             = flat
-    doc.room             = room
-    doc.asset            = asset
-    doc.location         = location
-    doc.description      = description
-    doc.phone_number     = phone_number
-    doc.maintenance_date = maintenance_date
-    doc.time_slot        = time_slot
+    doc.customer                  = customer
+    doc.priority                  = priority
+    doc.maintenance_type          = maintenance_type
+    doc.flat                      = flat
+    doc.room                      = room
+    doc.asset                     = asset if is_asset_scope else None
+    doc.location                  = location
+    doc.description               = description
+    doc.phone_number              = phone_number
+    doc.maintenance_date          = maintenance_date
+    doc.time_slot                 = time_slot
+    doc.custom_maintenance_scope  = maintenance_scope
+    doc.custom_scope_reference    = scope_reference if not is_asset_scope else None
 
-    # doc.insert(ignore_permissions=False)
-    # frappe.db.commit()
     doc.insert(ignore_permissions=False)
     doc.date_of_submit = frappe.utils.today()
     doc.submit()
     frappe.db.commit()
 
+    # ── Propagate scope info onto the linked Asset Maintenance Log ────
+    # custom_asset on the log is never mandatory, so when there's no asset we
+    # mirror scope_reference (and customer) onto the log instead. custom_customer
+    # is set directly (instead of relying on Asset → Location → Customer) so
+    # non-asset logs can still be looked up for this customer later.
+    if doc.get("maintenance_log"):
+        log_update = {
+            "custom_maintenance_scope": doc.custom_maintenance_scope,
+            "custom_scope_reference": doc.custom_scope_reference,
+        }
+        if not is_asset_scope:
+            log_update["custom_customer"] = doc.customer
+
+        frappe.db.set_value("Asset Maintenance Log", doc.maintenance_log, log_update)
+        frappe.db.commit()
+
     # ── Collect all uploaded files from multipart form-data ───────
-    # Werkzeug (used by Frappe) stores multiple files with same key
-    # in request.files.getlist(key) — handles both single and multiple
     all_file_objects = []
 
     raw_files = frappe.request.files
     if raw_files:
-        # getlist returns all files for a given field name
-        # Try common field names, then fall back to all keys
         for key in raw_files.keys():
             file_list = raw_files.getlist(key)
             for f in file_list:
@@ -489,6 +521,8 @@ def create_maintenance_request(
             "phoneNumber":      doc.phone_number,
             "maintenanceDate":  str(doc.maintenance_date) if doc.maintenance_date else None,
             "timeSlot":         doc.time_slot,
+            "maintenanceScope": doc.custom_maintenance_scope,
+            "scopeReference":   doc.custom_scope_reference,
             "status":           doc.docstatus,
             "createdAt":        str(doc.creation),
             "updatedAt":        str(doc.modified),
@@ -496,7 +530,6 @@ def create_maintenance_request(
             "attachments":      attachments,
         },
     }
-
 import frappe
 from frappe import _
 

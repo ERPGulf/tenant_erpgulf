@@ -11,13 +11,13 @@ http:
     data:
       - name: location_name
         type: text
-        value: xyz
+        value: T1-GF-ENTRY-RAMP
       - name: task_id
         type: text
-        value: vgg5fulvhb
+        value: ukqer9s5m5
   auth:
     type: bearer
-    token: 9yLDHVYFPx1Kl3AXGm1UdPDegSgZNk
+    token: ""
 
 settings:
   encodeUrl: true
