@@ -286,6 +286,9 @@ doctype_js = {
     "Maintenance Request":"public/js/maintenance_request.js"
 
 }
+doctype_list_js = {
+    "Location": "public/js/location.js"
+}
 scheduler_events = {
     "cron": {
         "37 8 * * *": [  # 8:30 PM every night

@@ -109,3 +109,23 @@ def backfill_qr_for_existing_locations(scale=8):
 
     frappe.db.commit()
     return {"status": "success", "count": len(locations), "locations": locations}
+
+
+@frappe.whitelist()
+def generate_qr_for_selected(locations, scale=8):
+    """Generate/regenerate QR for the Locations passed in (from list view selection)."""
+    if isinstance(locations, str):
+        locations = frappe.parse_json(locations)
+
+    done, failed = [], []
+    for loc in locations:
+        try:
+            create_location_qr(frappe.get_doc("Location", loc), scale=scale)
+            frappe.db.commit()
+            done.append(loc)
+        except Exception:
+            frappe.db.rollback()
+            frappe.log_error(title=f"QR generation failed for {loc}")
+            failed.append(loc)
+
+    return {"status": "success", "done": done, "failed": failed}
