@@ -1,0 +1,88 @@
+{
+ "cards": [
+  {
+   "card": "Planned - New"
+  },
+  {
+   "card": "Planned - In Progress"
+  },
+  {
+   "card": "Planned - On Hold"
+  },
+  {
+   "card": "Planned - Completed"
+  },
+  {
+   "card": "Planned - Total"
+  },
+  {
+   "card": "Reactive - New"
+  },
+  {
+   "card": "Reactive - In Progress"
+  },
+  {
+   "card": "Reactive - On Hold"
+  },
+  {
+   "card": "Reactive - Completed"
+  },
+  {
+   "card": "Reactive - Total"
+  },
+  {
+   "card": "Quotation - Quotation not reqd"
+  },
+  {
+   "card": "Quotation - Quotation issued"
+  },
+  {
+   "card": "Quotation - Quotation approved"
+  },
+  {
+   "card": "Quotation - Paid"
+  },
+  {
+   "card": "Quotations Requested - Total"
+  },
+  {
+   "card": "Average Duration - Planned"
+  },
+  {
+   "card": "Average Duration - Reactive"
+  },
+  {
+   "card": "Average Duration - Overall"
+  }
+ ],
+ "charts": [
+  {
+   "chart": "Planned Maintenance by Status",
+   "width": "Half"
+  },
+  {
+   "chart": "Reactive Maintenance by Status",
+   "width": "Half"
+  },
+  {
+   "chart": "Quotation Status Breakdown",
+   "width": "Half"
+  },
+  {
+   "chart": "Task Duration Trend",
+   "width": "Half"
+  }
+ ],
+ "creation": "2026-08-03 15:08:06.161619",
+ "dashboard_name": "Maintenance Dashboard",
+ "docstatus": 0,
+ "doctype": "Dashboard",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "modified": "2026-08-04 18:36:15.118386",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "Maintenance Dashboard",
+ "owner": "Administrator"
+}
