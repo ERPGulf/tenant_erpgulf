@@ -57,7 +57,7 @@ http:
         value: unit 123
   auth:
     type: bearer
-    token: ""
+    token: VFlg2J4o6F5Zu4BnaepKzTl3T7zDrC
 
 settings:
   encodeUrl: true

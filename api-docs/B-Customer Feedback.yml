@@ -11,16 +11,19 @@ http:
     data:
       - name: asset_maintenance_log_id
         type: text
-        value: ACC-AML-2026-00169
+        value: ACC-AML-2026-00170
       - name: star_rating
         type: text
         value: "5"
       - name: feedback
         type: text
         value: good
+      - name: completed
+        type: text
+        value: "true"
   auth:
     type: bearer
-    token: ""
+    token: xNh3y6KuFUJGoLYAvpEC562q2WyqXj
 
 settings:
   encodeUrl: true

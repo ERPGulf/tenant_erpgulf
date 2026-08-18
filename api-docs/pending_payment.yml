@@ -1,0 +1,23 @@
+info:
+  name: pending_payment
+  type: http
+  seq: 26
+
+http:
+  method: GET
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.pending_payment.get_unpaid_maintenance_summary
+  body:
+    type: multipart-form
+    data:
+      - name: customer_id
+        type: text
+        value: customer test
+  auth:
+    type: bearer
+    token: ""
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
