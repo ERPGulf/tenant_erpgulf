@@ -24,7 +24,6 @@ http:
       - name: asset
         type: text
         value: ACC-ASS-2026-00031
-        disabled: true
       - name: location
         type: text
         value: T1-GF-ENTRY-RAMP
@@ -51,13 +50,14 @@ http:
         value: 2026-07-20
       - name: maintenance_scope
         type: text
-        value: Unit
+        value: Asset
       - name: scope_reference
         type: text
         value: unit 123
+        disabled: true
   auth:
     type: bearer
-    token: VFlg2J4o6F5Zu4BnaepKzTl3T7zDrC
+    token: OkDli5z43wXFnlI4HMRpAsPwNU1R6X
 
 settings:
   encodeUrl: true

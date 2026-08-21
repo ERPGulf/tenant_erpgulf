@@ -1,0 +1,27 @@
+info:
+  name: update_passw
+  type: http
+  seq: 27
+
+http:
+  method: POST
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.update_customer_password
+  body:
+    type: multipart-form
+    data:
+      - name: customer
+        type: text
+        value: customer test
+      - name: unique_id
+        type: text
+        value: e7046352206adccdc427e35e5f2eddc9
+      - name: password
+        type: text
+        value: "1234567"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

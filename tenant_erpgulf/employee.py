@@ -500,233 +500,7 @@ def get_location_full_details(location_name, task_id=None):
             mimetype="application/json",
         )
 
-# import json
-# import frappe
-# from werkzeug.wrappers import Response
 
-
-# @frappe.whitelist(allow_guest=False)
-# def get_location_full_details(location_name):
-#     try:
-#         # ── STEP 1: Identify user from Bearer token ────────────────────────────
-#         current_user = frappe.session.user
-
-#         if not current_user or current_user == "Guest":
-#             return Response(
-#                 json.dumps({
-#                     "status": "error",
-#                     "message": "Unauthorized. Please provide a valid Bearer token.",
-#                 }),
-#                 status=401,
-#                 mimetype="application/json",
-#             )
-
-#         # ── STEP 2: Validate Location ──────────────────────────────────────────
-#         if not frappe.db.exists("Location", location_name):
-#             return Response(
-#                 json.dumps({
-#                     "status": "error",
-#                     "message": f"Location '{location_name}' not found",
-#                 }),
-#                 status=404,
-#                 mimetype="application/json",
-#             )
-
-#         # ── STEP 3: Fetch only required Location fields ────────────────────────
-#         location = frappe.db.get_value(
-#             "Location",
-#             location_name,
-#             [
-#                 "name",
-#                 "owner",
-#                 "location_name",
-#                 "custom_flat_number",
-#                 "custom_floor",
-#                 "custom_building",
-#                 "custom_compound",
-#                 "custom_department",
-#                 "custom_customer",
-#             ],
-#             as_dict=True,
-#         )
-
-#         # ── STEP 4: Fetch room_name from Room Equipment child table ────────────
-#         room_equipment = frappe.get_all(
-#             "Room Equipment",
-#             filters={"parent": location_name},
-#             fields=["room_name"],
-#         )
-#         location["room_equipment"] = room_equipment
-
-#         # ── STEP 5: Fetch all Assets linked to this Location ──────────────────
-#         assets = frappe.get_all(
-#             "Asset",
-#             filters={"location": location_name},
-#             fields=[
-#                 "name",
-#                 "asset_name",
-#                 "location",
-#                 "asset_category",
-#                 "custom_room_name",
-#             ],
-#         )
-
-#         # ── STEP 6: Enrich each Asset with Maintenance Logs ───────────────────
-#         enriched_assets = []
-
-#         for asset in assets:
-#             asset_dict = dict(asset)
-
-#             # ── 6a: Reactive logs → custom_asset = asset["name"] ──────────────
-#             reactive_logs = frappe.get_all(
-#                 "Asset Maintenance Log",
-#                 filters={
-#                     "custom_asset":                  asset["name"],
-#                     "custom_asset_maintenance_type": "Reactive",
-#                     "docstatus":                     ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
-#                 },
-#                 fields=[
-#                     "name",
-#                     "asset_name",
-#                     "custom_name_of_task",   # Reactive task name lives here
-#                     "maintenance_status",
-#                     "maintenance_type",
-#                     "custom_maintenance_types",
-#                     "custom_asset_maintenance_type",
-#                     "custom_asset",
-#                     "completion_date",
-#                     "custom_assign_to",
-#                     "assign_to_name",
-#                 ],
-#             )
-
-#             # ── 6b: Planned logs → asset_name = asset["asset_name"] ───────────
-#             planned_logs = frappe.get_all(
-#                 "Asset Maintenance Log",
-#                 filters={
-#                     "asset_name":                    asset["asset_name"],
-#                     "custom_asset_maintenance_type": "Planned",
-#                     "docstatus":                     ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
-#                 },
-#                 fields=[
-#                     "name",
-#                     "asset_name",
-#                     "task",   # Planned task name lives here (not task_name)
-#                     "maintenance_status",
-#                     "maintenance_type",
-#                     "custom_maintenance_types",
-#                     "custom_asset_maintenance_type",
-#                     "completion_date",
-#                     "assign_to_name",
-#                 ],
-#             )
-
-#             # ── 6c: Merge both log types ───────────────────────────────────────
-#             all_logs = reactive_logs + planned_logs
-
-#             # ── 6d: Enrich each log with stock items ───────────────────────────
-#             enriched_logs = []
-#             for log in all_logs:
-#                 log_dict = dict(log)
-
-#                 maintenance_kind = log_dict.get("custom_asset_maintenance_type")
-
-#                 if maintenance_kind == "Reactive":
-#                     # Reactive logs only carry custom_maintenance_types; drop maintenance_type
-#                     log_dict.pop("maintenance_type", None)
-
-#                     # task_name is sourced from custom_name_of_task for Reactive logs,
-#                     # but the output key stays "task_name" in both cases
-#                     log_dict["task_name"] = log_dict.get("custom_name_of_task")
-#                     log_dict.pop("custom_name_of_task", None)
-
-#                     # assign_to_name is sourced from custom_assign_to for Reactive logs,
-#                     # but the output parameter name stays "assign_to_name" in both cases
-#                     log_dict["assign_to_name"] = log_dict.get("custom_assign_to")
-#                     log_dict.pop("custom_assign_to", None)
-
-#                 elif maintenance_kind == "Planned":
-#                     # Planned logs only carry maintenance_type; drop custom_maintenance_types
-#                     log_dict.pop("custom_maintenance_types", None)
-
-#                     # task_name is sourced from "task" for Planned logs,
-#                     # but the output key stays "task_name" in both cases
-#                     log_dict["task_name"] = log_dict.get("task")
-#                     log_dict.pop("task", None)
-
-#                     # assign_to_name is already sourced correctly from its own
-#                     # field for Planned logs — no remapping needed.
-
-#                 stock_items = frappe.get_all(
-#                     "Stock Items For Asset",
-#                     filters={"parent": log["name"]},
-#                     fields=[
-#                         "name",
-#                         "item_code",
-#                         "qty",
-#                         "uom",
-#                         "stock_uom",
-#                         "conversion_factor",
-#                         "s_warehouse",
-#                     ],
-#                 )
-#                 log_dict["custom_items"] = stock_items
-
-#                 # ── 6e: task_id → ToDo linked to this Asset Maintenance Log ────
-#                 task_id = frappe.db.get_value(
-#                     "ToDo",
-#                     {
-#                         "reference_type": "Asset Maintenance Log",
-#                         "reference_name": log["name"],
-#                     },
-#                     "name",
-#                 )
-#                 log_dict["task_id"] = task_id
-
-#                 enriched_logs.append(log_dict)
-
-#             asset_dict["maintenance_logs"] = enriched_logs
-#             enriched_assets.append(asset_dict)
-
-#         # ── STEP 7: Build and return final response ────────────────────────────
-#         return Response(
-#             json.dumps(
-#                 {
-#                     "status": "success",
-#                     "data": {
-#                         "location": location,
-#                         "assets":   enriched_assets,
-#                     }
-#                 },
-#                 default=str
-#             ),
-#             status=200,
-#             mimetype="application/json",
-#         )
-
-#     except frappe.PermissionError:
-#         return Response(
-#             json.dumps({
-#                 "status": "error",
-#                 "message": "You do not have permission to access this resource",
-#             }),
-#             status=403,
-#             mimetype="application/json",
-#         )
-
-#     except Exception as e:
-#         frappe.log_error(
-#             title="get_location_full_details error",
-#             message=frappe.get_traceback()
-#         )
-#         return Response(
-#             json.dumps({
-#                 "status": "error",
-#                 "message": str(e),
-#             }),
-#             status=500,
-#             mimetype="application/json",
-#         )
 @frappe.whitelist(allow_guest=True)
 def generate_and_send_otp(mobile_no):
     try:
@@ -810,6 +584,16 @@ def generate_and_send_otp(mobile_no):
 # OTP — VALIDATE
 # ════════════════════════════════════════════════════════════════════════════════
 
+import json
+
+import frappe
+from werkzeug.wrappers import Response
+
+# How long the "verified" token stays valid after a successful OTP check.
+# The customer must set their password within this window.
+VERIFICATION_TOKEN_TTL = 600  # seconds (10 minutes)
+
+
 @frappe.whitelist(allow_guest=True)
 def verify_otp(mobile_no, otp):
     try:
@@ -846,11 +630,24 @@ def verify_otp(mobile_no, otp):
         # ── STEP 4: OTP matched — delete from cache immediately ───────────────
         frappe.cache().delete_key(key)
 
+        # ── STEP 5: Issue a one-time "verified" token ──────────────────────────
+        # This is the "unique ID" the client must send back, along with the
+        # customer ID and new password, to update_customer_password (see
+        # update_customer_password.py). It is opaque (not the OTP, not the
+        # mobile number) and expires quickly, so it can't be replayed or guessed.
+        unique_id = frappe.generate_hash(length=32)
+        frappe.cache().set_value(
+            f"otp_verified:{unique_id}",
+            mobile_no,
+            expires_in_sec=VERIFICATION_TOKEN_TTL,
+        )
+
         return Response(
             json.dumps({
-                "status":  "success",
-                "message": "OTP verified successfully",
-                "mobile":  mobile_no,
+                "status":    "success",
+                "message":   "OTP verified successfully",
+                "mobile":    mobile_no,
+                "unique_id": unique_id,
             }),
             status=200, mimetype="application/json",
         )
@@ -862,6 +659,82 @@ def verify_otp(mobile_no, otp):
             status=500, mimetype="application/json",
         )
 
+import json
+
+import frappe
+from werkzeug.wrappers import Response
+
+
+@frappe.whitelist(allow_guest=True)
+def update_customer_password(unique_id, customer, password):
+    """
+    Called after verify_otp (see verify_otp.py). Takes the unique_id issued
+    by verify_otp, the Customer ID, and the new password, and stores the
+    (hashed) password on Customer.custom_password.
+
+    NOTE: adjust the "mobile_no" field name below (STEP 3) to whatever
+    field actually holds the customer's mobile number on your Customer
+    doctype, if it isn't literally called mobile_no / custom_mobile_no.
+    """
+    try:
+        if not unique_id or not customer or not password:
+            return Response(
+                json.dumps({"status": "error", "message": "unique_id, customer and password are required"}),
+                status=400, mimetype="application/json",
+            )
+
+        # ── STEP 1: Look up the token issued by verify_otp ─────────────────────
+        verify_key = f"otp_verified:{unique_id}"
+        mobile_no  = frappe.cache().get_value(verify_key)
+
+        if not mobile_no:
+            return Response(
+                json.dumps({
+                    "status":  "error",
+                    "message": "Invalid or expired verification ID. Please verify OTP again.",
+                }),
+                status=401, mimetype="application/json",
+            )
+
+        # ── STEP 2: Make sure the customer exists ──────────────────────────────
+        if not frappe.db.exists("Customer", customer):
+            return Response(
+                json.dumps({"status": "error", "message": "Customer not found"}),
+                status=404, mimetype="application/json",
+            )
+
+        customer_doc = frappe.get_doc("Customer", customer)
+
+        # ── STEP 3: (Recommended) confirm this customer belongs to the mobile
+        # number that was actually OTP-verified, so unique_id + customer can't
+        # be mixed-and-matched across two different people. Skip/adjust this
+        # block if Customer doesn't carry a mobile number field.
+        customer_mobile = customer_doc.get("mobile_no") or customer_doc.get("custom_mobile_no")
+        if customer_mobile and str(customer_mobile) != str(mobile_no):
+            return Response(
+                json.dumps({"status": "error", "message": "Customer does not match verified mobile number"}),
+                status=403, mimetype="application/json",
+            )
+
+        # ── STEP 4: Store the password as-is in custom_password ────────────────
+        # db_set writes directly and skips doctype validation hooks/versioning
+        # noise for this single field.
+        customer_doc.db_set("custom_password", password, update_modified=False)
+
+        # ── STEP 5: Invalidate the token so it can't be reused ─────────────────
+        frappe.cache().delete_key(verify_key)
+
+        return Response(
+            json.dumps({"status": "success", "message": "Password updated successfully"}),
+            status=200, mimetype="application/json",
+        )
+
+    except Exception as e:
+        frappe.log_error(title="update_customer_password error", message=frappe.get_traceback())
+        return Response(
+            json.dumps({"status": "error", "message": str(e)}),
+            status=500, mimetype="application/json",
+        )
 
 # ════════════════════════════════════════════════════════════════════════════════
 # INTERNAL — Send OTP via WhatsApp (unchanged)
