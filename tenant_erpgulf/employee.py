@@ -646,7 +646,6 @@ def verify_otp(mobile_no, otp):
             json.dumps({
                 "status":    "success",
                 "message":   "OTP verified successfully",
-                "mobile":    mobile_no,
                 "unique_id": unique_id,
             }),
             status=200, mimetype="application/json",
