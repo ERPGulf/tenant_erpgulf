@@ -14,7 +14,7 @@ http:
         value: customer test
       - name: unique_id
         type: text
-        value: e7046352206adccdc427e35e5f2eddc9
+        value: 08d6c7eacc97386ed91eb49789186afe
       - name: password
         type: text
         value: "1234567"

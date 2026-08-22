@@ -23,10 +23,11 @@ http:
         value: "true"
   auth:
     type: bearer
-    token: xNh3y6KuFUJGoLYAvpEC562q2WyqXj
+    token: ""
 
 settings:
   encodeUrl: true
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true
