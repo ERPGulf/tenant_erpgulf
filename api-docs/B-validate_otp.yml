@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.verify_otp?customer_id=customer test&otp=123456&app_key=dGVuYW50X2VycGd1bGY=
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.verify_otp?customer_id=customer test&otp=123456&app_key=
   params:
     - name: customer_id
       value: customer test
@@ -14,7 +14,7 @@ http:
       value: "123456"
       type: query
     - name: app_key
-      value: dGVuYW50X2VycGd1bGY=
+      value: ""
       type: query
   body:
     type: multipart-form
