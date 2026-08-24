@@ -599,19 +599,26 @@ def generate_and_send_otp(customer_id):
 # ════════════════════════════════════════════════════════════════════════════════
 # OTP — VALIDATE
 # ════════════════════════════════════════════════════════════════════════════════
-
 import json
 
 import frappe
+from frappe.utils import cint
 from werkzeug.wrappers import Response
 
-# How long the "verified" token stays valid after a successful OTP check.
-# The customer must set their password within this window.
+from tenant_erpgulf.customer_oauth_utils import issue_oauth_tokens_for_app
+
+# NOTE: adjust the import path above to wherever customer_oauth_utils.py
+# actually lives in your app, e.g.:
+#   from your_app.your_app.api.customer_oauth_utils import issue_oauth_tokens_for_app
+
+# How long the "verified" token stays valid after a successful OTP check,
+# for customers who still use the password flow (custom_password_required
+# ticked). The customer must set/reset their password within this window.
 VERIFICATION_TOKEN_TTL = 600  # seconds (10 minutes)
 
 
 @frappe.whitelist(allow_guest=True)
-def verify_otp(customer_id, otp):
+def verify_otp(customer_id, otp, app_key=None):
     try:
         if not customer_id or not otp:
             return Response(
@@ -619,10 +626,15 @@ def verify_otp(customer_id, otp):
                 status=400, mimetype="application/json",
             )
 
-        # ── STEP 1: Fetch mobile number from Customer doctype ─────────────────
-        mobile_no = frappe.db.get_value("Customer", customer_id, "mobile_no")
+        # ── STEP 1: Fetch mobile number + password-required flag ──────────────
+        customer = frappe.db.get_value(
+            "Customer",
+            customer_id,
+            ["mobile_no", "custom_password_required"],
+            as_dict=True,
+        )
 
-        if not mobile_no:
+        if not customer or not customer.get("mobile_no"):
             return Response(
                 json.dumps({
                     "status":  "error",
@@ -630,6 +642,13 @@ def verify_otp(customer_id, otp):
                 }),
                 status=404, mimetype="application/json",
             )
+
+        mobile_no = customer.get("mobile_no")
+
+        # Default to "required" (1) when the field is missing/None so
+        # existing customers keep the pre-customization behaviour.
+        password_required = customer.get("custom_password_required")
+        password_required = 1 if password_required is None else cint(password_required)
 
         # ── STEP 2: Fetch cached OTP ────────────────────────────────────────────
         key        = f"otp:{mobile_no}"
@@ -658,23 +677,66 @@ def verify_otp(customer_id, otp):
         # ── STEP 5: OTP matched — delete from cache immediately ───────────────
         frappe.cache().delete_key(key)
 
-        # ── STEP 6: Issue a one-time "verified" token ──────────────────────────
-        # This is the "unique ID" the client must send back, along with the
-        # customer ID and new password, to update_customer_password (see
-        # update_customer_password.py). It is opaque (not the OTP, not the
-        # mobile number) and expires quickly, so it can't be replayed or guessed.
-        unique_id = frappe.generate_hash(length=32)
-        frappe.cache().set_value(
-            f"otp_verified:{unique_id}",
+        # ── STEP 6: Branch on custom_password_required ─────────────────────────
+        if password_required:
+            # Existing behaviour, unchanged: issue a one-time "verified" token.
+            # This is the "unique ID" the client must send back, along with the
+            # customer ID and new password, to update_customer_password. It is
+            # opaque (not the OTP, not the mobile number) and expires quickly,
+            # so it can't be replayed or guessed.
+            unique_id = frappe.generate_hash(length=32)
+            frappe.cache().set_value(
+                f"otp_verified:{unique_id}",
+                customer_id,
+                expires_in_sec=VERIFICATION_TOKEN_TTL,
+            )
+
+            return Response(
+                json.dumps({
+                    "status":    "success",
+                    "message":   "OTP verified successfully",
+                    "unique_id": unique_id,
+                }),
+                status=200, mimetype="application/json",
+            )
+
+        # ── Password NOT required: OTP verification is the login itself. ──────
+        # Issue OAuth access_token + refresh_token directly instead of a
+        # password-reset unique_id.
+        if not app_key:
+            return Response(
+                json.dumps({
+                    "status": "error",
+                    "message": "app_key is required to complete login for this customer",
+                }),
+                status=400, mimetype="application/json",
+            )
+
+        error_response, token_json = issue_oauth_tokens_for_app(app_key)
+        if error_response:
+            return error_response
+
+        customer_details = frappe.db.get_value(
+            "Customer",
             customer_id,
-            expires_in_sec=VERIFICATION_TOKEN_TTL,
+            ["name", "customer_name", "email_id"],
+            as_dict=True,
         )
 
         return Response(
             json.dumps({
-                "status":    "success",
-                "message":   "OTP verified successfully",
-                "unique_id": unique_id,
+                "status":  "success",
+                "message": "OTP verified successfully",
+                "data": {
+                    "token": token_json,
+                    "customer": {
+                        "id": customer_details.name,
+                        "customer_name": customer_details.customer_name,
+                        "phone": mobile_no,
+                        "email": customer_details.get("email_id"),
+                    },
+                    "time": str(frappe.utils.now_datetime()),
+                }
             }),
             status=200, mimetype="application/json",
         )
@@ -685,7 +747,6 @@ def verify_otp(customer_id, otp):
             json.dumps({"status": "error", "message": str(e)}),
             status=500, mimetype="application/json",
         )
-
 import json
 
 import frappe

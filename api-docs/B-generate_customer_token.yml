@@ -14,7 +14,7 @@ http:
         value: customer test
       - name: password
         type: text
-        value: Friday2000@TY
+        value: "123"
       - name: app_key
         type: text
         value: dGVuYW50X2VycGd1bGY=
@@ -25,3 +25,4 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

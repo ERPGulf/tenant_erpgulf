@@ -1,4 +1,4 @@
-
+   
 # import frappe
 # import base64
 # import json
@@ -40,12 +40,13 @@
 #             mimetype="application/json",
 #         )
 
-#     from frappe.utils.password import get_decrypted_password
-
-#     try:
-#         stored_password = get_decrypted_password("Customer", customer_id, "custom_password")
-#     except Exception:
-#         stored_password = None
+#     # ── Compare against the stored password directly ───────────────────────────
+#     # NOTE: custom_password is written via db_set() in update_customer_password.py,
+#     # which bypasses Frappe's Password-field encryption (that only fires on
+#     # doc.save()/db_update()) and never writes to __Auth. So it's stored as
+#     # plain text in the Customer table — get_decrypted_password() will never
+#     # find it there, which is why the old code always failed here.
+#     stored_password = customer_doc.get("custom_password")
 
 #     if not stored_password or stored_password != password:
 #         return Response(
@@ -75,6 +76,8 @@
 #         customer_phone = None
 
 #     # ── GET username and password from Tenant Erpgulf Setting Page ───────────
+#     from frappe.utils.password import get_decrypted_password
+
 #     try:
 #         system_settings = frappe.get_doc("Tenant Erpgulf Setting Page")
 #         username = system_settings.customer_user
@@ -334,23 +337,35 @@
 #             }),
 #             status=500,
 #             mimetype="application/json",
-#         )        
+#         )
 import frappe
-import base64
 import json
+from frappe.utils import cint
 import requests
 from werkzeug.wrappers import Response
 
+from tenant_erpgulf.customer_oauth_utils import issue_oauth_tokens_for_app
+
+# NOTE: adjust the import path above to wherever customer_oauth_utils.py
+# actually lives in your app, e.g.:
+#   from your_app.your_app.api.customer_oauth_utils import issue_oauth_tokens_for_app
+
 
 @frappe.whitelist(allow_guest=True)
-def generate_token_secure_for_customers(customer_id, password, app_key):
+def generate_token_secure_for_customers(customer_id, app_key, password=None):
     """
     Generate OAuth2 access token for customers.
 
     Params:
         customer_id : ERPNext Customer document name / ID
-        password    : Customer's custom_password field value
         app_key     : Base64-encoded OAuth app_name
+        password    : Customer's custom_password field value.
+                      Only required/checked when the customer's
+                      `custom_password_required` checkbox is ticked.
+                      For customers with that box unchecked, password
+                      login is disabled entirely — they must log in via
+                      the OTP flow (see verify_otp), which issues tokens
+                      directly.
     """
     frappe.log_error(
         title="Customer login attempt",
@@ -361,7 +376,14 @@ def generate_token_secure_for_customers(customer_id, password, app_key):
     customer_doc = frappe.db.get_value(
         "Customer",
         {"name": customer_id},
-        ["name", "customer_name", "custom_password", "customer_primary_contact", "email_id"],
+        [
+            "name",
+            "customer_name",
+            "custom_password",
+            "custom_password_required",
+            "customer_primary_contact",
+            "email_id",
+        ],
         as_dict=True
     )
 
@@ -376,22 +398,42 @@ def generate_token_secure_for_customers(customer_id, password, app_key):
             mimetype="application/json",
         )
 
-    # ── Compare against the stored password directly ───────────────────────────
-    # NOTE: custom_password is written via db_set() in update_customer_password.py,
-    # which bypasses Frappe's Password-field encryption (that only fires on
-    # doc.save()/db_update()) and never writes to __Auth. So it's stored as
-    # plain text in the Customer table — get_decrypted_password() will never
-    # find it there, which is why the old code always failed here.
-    stored_password = customer_doc.get("custom_password")
+    # ── Password-required toggle ────────────────────────────────────────────
+    # Default to "required" (1) when the field is missing/None so existing
+    # customers who haven't had the field set keep behaving exactly as
+    # before this customization.
+    password_required = customer_doc.get("custom_password_required")
+    password_required = 1 if password_required is None else cint(password_required)
 
-    if not stored_password or stored_password != password:
+    if password_required:
+        # ── Compare against the stored password directly ───────────────────
+        # NOTE: custom_password is written via db_set() in
+        # update_customer_password.py, which bypasses Frappe's Password-field
+        # encryption (that only fires on doc.save()/db_update()) and never
+        # writes to __Auth. So it's stored as plain text in the Customer
+        # table — get_decrypted_password() will never find it there.
+        stored_password = customer_doc.get("custom_password")
+
+        if not stored_password or not password or stored_password != password:
+            return Response(
+                json.dumps({
+                    "status": "error",
+                    "message": "Invalid Customer ID or Password",
+                    "user_count": 0
+                }),
+                status=401,
+                mimetype="application/json",
+            )
+    else:
+        # Password login is disabled for this customer — send them to the
+        # OTP flow instead of silently logging them in without a password.
         return Response(
             json.dumps({
                 "status": "error",
-                "message": "Invalid Customer ID or Password",
+                "message": "Password login is disabled for this customer. Please log in using OTP (send_otp / verify_otp).",
                 "user_count": 0
             }),
-            status=401,
+            status=403,
             mimetype="application/json",
         )
 
@@ -411,162 +453,36 @@ def generate_token_secure_for_customers(customer_id, password, app_key):
     except Exception:
         customer_phone = None
 
-    # ── GET username and password from Tenant Erpgulf Setting Page ───────────
-    from frappe.utils.password import get_decrypted_password
+    # ── Issue the OAuth2 token via the shared helper ───────────────────────
+    error_response, token_json = issue_oauth_tokens_for_app(app_key)
+    if error_response:
+        return error_response
 
-    try:
-        system_settings = frappe.get_doc("Tenant Erpgulf Setting Page")
-        username = system_settings.customer_user
-        password = get_decrypted_password(
-            "Tenant Erpgulf Setting Page",
-            system_settings.name,
-            "password"
-        )
-    except Exception as e:
-        return Response(
-            json.dumps({
-                "status": "error",
-                "message": f"Customer user settings not configured: {str(e)}",
-                "user_count": 0
-            }),
-            status=500,
-            mimetype="application/json",
-        )
-
-    if not username or not password:
-        return Response(
-            json.dumps({
-                "status": "error",
-                "message": "Customer user settings not configured",
-                "user_count": 0
-            }),
-            status=500,
-            mimetype="application/json",
-        )
-
-    # ── FROM HERE: EXACT SAME CODE AS generate_token_secure_for_users ─────────
-    try:
-        # ── STEP 1: Decode app_key ────────────────────────────────────────────
-        try:
-            decoded_app_key = base64.b64decode(app_key).decode("utf-8")
-        except Exception:
-            return Response(
-                json.dumps({
-                    "status": "error",
-                    "message": "Security Parameters are not valid",
-                    "user_count": 0
-                }),
-                status=401,
-                mimetype="application/json",
-            )
-
-        # ── STEP 2: Fetch OAuth Client by app_name ────────────────────────────
-        oauth_client = frappe.db.get_value(
-            "OAuth Client",
-            {"app_name": decoded_app_key},
-            ["name", "client_id", "client_secret", "user"],
-            as_dict=True
-        )
-
-        if not oauth_client or not oauth_client.get("client_id"):
-            return Response(
-                json.dumps({
-                    "status": "error",
-                    "message": "Security Parameters are not valid",
-                    "user_count": 0
-                }),
-                status=401,
-                mimetype="application/json",
-            )
-
-        # ── STEP 3: Validate host_name config ─────────────────────────────────
-        host_name = frappe.local.conf.get("host_name")
-        if not host_name:
-            return Response(
-                json.dumps({
-                    "status": "error",
-                    "message": "Server configuration error: host_name missing",
-                    "user_count": 0
-                }),
-                status=500,
-                mimetype="application/json",
-            )
-
-        # ── STEP 4: Request token from Frappe OAuth2 endpoint ─────────────────
-        token_url = f"{host_name}/api/method/frappe.integrations.oauth2.get_token"
-
-        payload = {
-            "username": username,
-            "password": password,
-            "grant_type": "password",
-            "client_id": oauth_client["client_id"],
-            "client_secret": oauth_client["client_secret"],
-        }
-
-        token_response = requests.post(
-            token_url,
-            data=payload,
-            headers={"Accept": "application/json"},
-            timeout=30
-        )
-
-        # ── STEP 5: Return token + customer data or error ──────────────────────
-        if token_response.status_code == 200:
-            return Response(
-                json.dumps({
-                    "status": "success",
-                    "data": {
-                        "token": token_response.json(),
-                        "customer": {
-                            "id": customer_doc.name,
-                            "customer_name": customer_doc.customer_name,
-                            "phone": customer_phone,
-                            "email": customer_doc.get("email_id"),
-                        },
-                        "time": str(frappe.utils.now_datetime()),
-                    }
-                }),
-                status=200,
-                mimetype="application/json",
-            )
-        else:
-            return Response(
-                json.dumps({
-                    "status": "error",
-                    "message": "Invalid credentials or unauthorized",
-                    "detail": token_response.json()
-                }),
-                status=401,
-                mimetype="application/json",
-            )
-
-    except requests.exceptions.Timeout:
-        return Response(
-            json.dumps({
-                "status": "error",
-                "message": "Token server timed out",
-                "user_count": 0
-            }),
-            status=504,
-            mimetype="application/json",
-        )
-
-    except Exception as e:
-        return Response(
-            json.dumps({
-                "status": "error",
-                "message": str(e),
-                "user_count": 0
-            }),
-            status=500,
-            mimetype="application/json",
-        )
+    return Response(
+        json.dumps({
+            "status": "success",
+            "data": {
+                "token": token_json,
+                "customer": {
+                    "id": customer_doc.name,
+                    "customer_name": customer_doc.customer_name,
+                    "phone": customer_phone,
+                    "email": customer_doc.get("email_id"),
+                },
+                "time": str(frappe.utils.now_datetime()),
+            }
+        }),
+        status=200,
+        mimetype="application/json",
+    )
 
 
 @frappe.whitelist(allow_guest=True)
 def refresh_customer_token(refresh_token):
     """
     Create a new access token using a refresh token.
+    Unchanged by this customization — refreshing is independent of whether
+    the customer originally logged in via password or OTP.
 
     Params:
         refresh_token: The refresh token string received during initial login
@@ -576,7 +492,6 @@ def refresh_customer_token(refresh_token):
         message=f"Refresh token used: {refresh_token[:20]}..." if refresh_token else "No token provided",
     )
 
-    # ── VALIDATE INPUT ─────────────────────────────────────────────────────────
     if not refresh_token:
         return Response(
             json.dumps({
@@ -587,7 +502,6 @@ def refresh_customer_token(refresh_token):
             mimetype="application/json",
         )
 
-    # ── VALIDATE HOST CONFIG ───────────────────────────────────────────────────
     host_name = frappe.local.conf.get("host_name")
     if not host_name:
         return Response(
@@ -599,7 +513,6 @@ def refresh_customer_token(refresh_token):
             mimetype="application/json",
         )
 
-    # ── REQUEST NEW TOKEN FROM FRAPPE OAuth2 ENDPOINT ─────────────────────────
     try:
         token_url = f"{host_name}/api/method/frappe.integrations.oauth2.get_token"
 
@@ -613,7 +526,6 @@ def refresh_customer_token(refresh_token):
             timeout=30
         )
 
-        # ── RETURN NEW TOKEN DATA OR ERROR ─────────────────────────────────────
         if token_response.status_code == 200:
             try:
                 message_json = token_response.json()
