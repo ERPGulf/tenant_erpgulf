@@ -14,7 +14,7 @@ http:
         value: customer test
       - name: unique_id
         type: text
-        value: 08d6c7eacc97386ed91eb49789186afe
+        value: 02e39af560fd30a2daaa29aaa214cb2f
       - name: password
         type: text
         value: "1234567"
@@ -25,3 +25,4 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true
