@@ -501,13 +501,33 @@ def get_location_full_details(location_name, task_id=None):
         )
 
 
+import random
+
+import frappe
+from frappe import _
+from werkzeug.wrappers import Response
+import json
+
+
 @frappe.whitelist(allow_guest=True)
-def generate_and_send_otp(mobile_no):
+def generate_and_send_otp(customer_id):
     try:
+        if not customer_id:
+            return Response(
+                json.dumps({"status": "error", "message": "customer_id is required"}),
+                status=400, mimetype="application/json",
+            )
+
+        # ── Fetch mobile number from Customer doctype ──────────────────────────
+        mobile_no = frappe.db.get_value("Customer", customer_id, "mobile_no")
+
         if not mobile_no:
             return Response(
-                json.dumps({"status": "error", "message": "mobile_no is required"}),
-                status=400, mimetype="application/json",
+                json.dumps({
+                    "status":  "error",
+                    "message": "No mobile number found for the given customer_id",
+                }),
+                status=404, mimetype="application/json",
             )
 
         # ── Fetch WhatsApp Saudi config ────────────────────────────────────────
@@ -537,7 +557,7 @@ def generate_and_send_otp(mobile_no):
         if is_testing:
             frappe.log_error(
                 title="[OTP] Testing mode — OTP not sent via WhatsApp",
-                message=f"mobile={mobile_no} | otp={otp}"
+                message=f"customer_id={customer_id} | mobile={mobile_no} | otp={otp}"
             )
             return Response(
                 json.dumps({
@@ -578,8 +598,6 @@ def generate_and_send_otp(mobile_no):
             json.dumps({"status": "error", "message": str(e)}),
             status=500, mimetype="application/json",
         )
-
-
 # ════════════════════════════════════════════════════════════════════════════════
 # OTP — VALIDATE
 # ════════════════════════════════════════════════════════════════════════════════
@@ -595,19 +613,31 @@ VERIFICATION_TOKEN_TTL = 600  # seconds (10 minutes)
 
 
 @frappe.whitelist(allow_guest=True)
-def verify_otp(mobile_no, otp):
+def verify_otp(customer_id, otp):
     try:
-        if not mobile_no or not otp:
+        if not customer_id or not otp:
             return Response(
-                json.dumps({"status": "error", "message": "mobile_no and otp are required"}),
+                json.dumps({"status": "error", "message": "customer_id and otp are required"}),
                 status=400, mimetype="application/json",
             )
 
-        # ── STEP 1: Fetch cached OTP ───────────────────────────────────────────
+        # ── STEP 1: Fetch mobile number from Customer doctype ─────────────────
+        mobile_no = frappe.db.get_value("Customer", customer_id, "mobile_no")
+
+        if not mobile_no:
+            return Response(
+                json.dumps({
+                    "status":  "error",
+                    "message": "No mobile number found for the given customer_id",
+                }),
+                status=404, mimetype="application/json",
+            )
+
+        # ── STEP 2: Fetch cached OTP ────────────────────────────────────────────
         key        = f"otp:{mobile_no}"
         stored_otp = frappe.cache().get_value(key)
 
-        # ── STEP 2: Check if OTP exists ────────────────────────────────────────
+        # ── STEP 3: Check if OTP exists ────────────────────────────────────────
         if not stored_otp:
             return Response(
                 json.dumps({
@@ -617,7 +647,7 @@ def verify_otp(mobile_no, otp):
                 status=404, mimetype="application/json",
             )
 
-        # ── STEP 3: Check if OTP matches ──────────────────────────────────────
+        # ── STEP 4: Check if OTP matches ──────────────────────────────────────
         if str(stored_otp) != str(otp):
             return Response(
                 json.dumps({
@@ -627,10 +657,10 @@ def verify_otp(mobile_no, otp):
                 status=400, mimetype="application/json",
             )
 
-        # ── STEP 4: OTP matched — delete from cache immediately ───────────────
+        # ── STEP 5: OTP matched — delete from cache immediately ───────────────
         frappe.cache().delete_key(key)
 
-        # ── STEP 5: Issue a one-time "verified" token ──────────────────────────
+        # ── STEP 6: Issue a one-time "verified" token ──────────────────────────
         # This is the "unique ID" the client must send back, along with the
         # customer ID and new password, to update_customer_password (see
         # update_customer_password.py). It is opaque (not the OTP, not the
@@ -638,7 +668,7 @@ def verify_otp(mobile_no, otp):
         unique_id = frappe.generate_hash(length=32)
         frappe.cache().set_value(
             f"otp_verified:{unique_id}",
-            mobile_no,
+            customer_id,
             expires_in_sec=VERIFICATION_TOKEN_TTL,
         )
 
@@ -670,10 +700,6 @@ def update_customer_password(unique_id, customer, password):
     Called after verify_otp (see verify_otp.py). Takes the unique_id issued
     by verify_otp, the Customer ID, and the new password, and stores the
     (hashed) password on Customer.custom_password.
-
-    NOTE: adjust the "mobile_no" field name below (STEP 3) to whatever
-    field actually holds the customer's mobile number on your Customer
-    doctype, if it isn't literally called mobile_no / custom_mobile_no.
     """
     try:
         if not unique_id or not customer or not password:
@@ -683,10 +709,10 @@ def update_customer_password(unique_id, customer, password):
             )
 
         # ── STEP 1: Look up the token issued by verify_otp ─────────────────────
-        verify_key = f"otp_verified:{unique_id}"
-        mobile_no  = frappe.cache().get_value(verify_key)
+        verify_key       = f"otp_verified:{unique_id}"
+        verified_customer = frappe.cache().get_value(verify_key)
 
-        if not mobile_no:
+        if not verified_customer:
             return Response(
                 json.dumps({
                     "status":  "error",
@@ -702,18 +728,16 @@ def update_customer_password(unique_id, customer, password):
                 status=404, mimetype="application/json",
             )
 
-        customer_doc = frappe.get_doc("Customer", customer)
-
-        # ── STEP 3: (Recommended) confirm this customer belongs to the mobile
-        # number that was actually OTP-verified, so unique_id + customer can't
-        # be mixed-and-matched across two different people. Skip/adjust this
-        # block if Customer doesn't carry a mobile number field.
-        customer_mobile = customer_doc.get("mobile_no") or customer_doc.get("custom_mobile_no")
-        if customer_mobile and str(customer_mobile) != str(mobile_no):
+        # ── STEP 3: Confirm this customer is the one that was OTP-verified,
+        # so unique_id + customer can't be mixed-and-matched across two
+        # different people.
+        if str(verified_customer) != str(customer):
             return Response(
-                json.dumps({"status": "error", "message": "Customer does not match verified mobile number"}),
+                json.dumps({"status": "error", "message": "Customer does not match verified customer"}),
                 status=403, mimetype="application/json",
             )
+
+        customer_doc = frappe.get_doc("Customer", customer)
 
         # ── STEP 4: Store the password as-is in custom_password ────────────────
         # db_set writes directly and skips doctype validation hooks/versioning
@@ -734,7 +758,6 @@ def update_customer_password(unique_id, customer, password):
             json.dumps({"status": "error", "message": str(e)}),
             status=500, mimetype="application/json",
         )
-
 # ════════════════════════════════════════════════════════════════════════════════
 # INTERNAL — Send OTP via WhatsApp (unchanged)
 # ════════════════════════════════════════════════════════════════════════════════

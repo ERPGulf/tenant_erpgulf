@@ -5,10 +5,10 @@ info:
 
 http:
   method: POST
-  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.verify_otp?mobile_no=918281693215&otp=123456
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.employee.verify_otp?customer_id=customer test&otp=123456
   params:
-    - name: mobile_no
-      value: "918281693215"
+    - name: customer_id
+      value: customer test
       type: query
     - name: otp
       value: "123456"
@@ -31,3 +31,4 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

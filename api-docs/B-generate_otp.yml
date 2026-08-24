@@ -9,9 +9,9 @@ http:
   body:
     type: multipart-form
     data:
-      - name: mobile_no
+      - name: customer_id
         type: text
-        value: "918281693215"
+        value: customer test
   auth:
     type: bearer
     token: ""
@@ -21,3 +21,4 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true
