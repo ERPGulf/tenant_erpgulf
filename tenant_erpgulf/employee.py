@@ -562,9 +562,7 @@ def generate_and_send_otp(customer_id):
             return Response(
                 json.dumps({
                     "status":  "success",
-                    "message": "OTP sent successfully",
-                    "mobile":  mobile_no,
-                    "otp":     otp,          # ← returned only in testing mode
+                    "message": "OTP sent successfully",        # ← returned only in testing mode
                 }),
                 status=200, mimetype="application/json",
             )

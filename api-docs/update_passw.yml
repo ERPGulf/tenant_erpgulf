@@ -14,10 +14,10 @@ http:
         value: customer test
       - name: unique_id
         type: text
-        value: 02e39af560fd30a2daaa29aaa214cb2f
+        value: 4a421e8544888484acbf815a1519c206
       - name: password
         type: text
-        value: "1234567"
+        value: "123"
   auth: inherit
 
 settings:
