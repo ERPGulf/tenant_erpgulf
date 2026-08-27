@@ -1,0 +1,25 @@
+info:
+  name: otp verification
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.sign.verify_sign_in_otp
+  body:
+    type: multipart-form
+    data:
+      - name: mobile_no
+        type: text
+        value: "12345678"
+      - name: otp
+        type: text
+        value: "123456"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false

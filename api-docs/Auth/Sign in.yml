@@ -1,0 +1,26 @@
+info:
+  name: Sign in
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: https://malavika16.erpgulf.com:3045/api/method/tenant_erpgulf.sign.sign_in
+  body:
+    type: multipart-form
+    data:
+      - name: mobile_no
+        type: text
+        value: "12345678"
+      - name: password
+        type: text
+        value: "12345"
+        disabled: true
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false
