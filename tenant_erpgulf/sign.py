@@ -125,7 +125,7 @@ def sign_in(mobile_no=None, password=None):
 
 # ════════════════════════════════════════════════════════════════════════════════
 # PUBLIC — Step 2 of sign-in when custom_otp_policy is Mandatory/Optional
-# ════════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════ ════════════════════════════════
 
 @frappe.whitelist(allow_guest=True)
 def verify_sign_in_otp(mobile_no=None, otp=None):
