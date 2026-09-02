@@ -346,14 +346,14 @@ def create_maintenance_request(
       customer           → test customer
       priority           → High
       maintenance_type   → Preventive Maintenance
-      flat               → 203   (not required if maintenance_scope = "Common Area")
-      room               → Master Bed Room   (not required if maintenance_scope = "Common Area")
+      flat               → 203   (required only if maintenance_scope = "Asset")
+      room               → Master Bed Room   (required only if maintenance_scope = "Asset")
       asset               → ACC-ASS-2026-00003   (required only if maintenance_scope = "Asset")
       location            → adc
       description         → abc
       phone_number        → 8281693215
-      maintenance_date    → 2026-07-20   (not required if maintenance_scope = "Common Area")
-      time_slot           → 10:00 AM - 12:00 PM   (not required if maintenance_scope = "Common Area")
+      maintenance_date    → 2026-07-20   (required only if maintenance_scope = "Asset")
+      time_slot           → 10:00 AM - 12:00 PM   (required only if maintenance_scope = "Asset")
       maintenance_scope   → Asset | Unit | Common Area | Building | Infrastructure | Landscape
       scope_reference     → e.g. "Unit 203" / "Lobby Common Area"  (required if scope != "Asset")
       attachment_ids      → file1.jpg   (File type — select multiple files)
@@ -368,7 +368,6 @@ def create_maintenance_request(
         )
 
     is_asset_scope = maintenance_scope == "Asset"
-    is_common_area_scope = maintenance_scope == "Common Area"
 
     # ── Validate required fields ──────────────────────────────────
     required = {
@@ -381,9 +380,10 @@ def create_maintenance_request(
         "maintenance_scope": maintenance_scope,
     }
 
-    # flat, room, maintenance_date, time_slot are mandatory for every scope
-    # EXCEPT "Common Area", where they become optional.
-    if not is_common_area_scope:
+    # flat, room, maintenance_date, time_slot are only mandatory for the
+    # "Asset" scope; every other scope (Unit, Common Area, Building,
+    # Infrastructure, Landscape) leaves them optional.
+    if is_asset_scope:
         required["flat"] = flat
         required["room"] = room
         required["maintenance_date"] = maintenance_date
