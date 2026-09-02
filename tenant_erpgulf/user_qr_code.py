@@ -307,6 +307,16 @@ def get_customer_maintenance_data(customer_id):
             opt for opt in maintenance_scope_options if opt != "Common Area"
         ]
 
+    # ── Common Area Locations (only fetched when the customer has access) ──
+    common_areas = []
+    if has_common_area_access and frappe.db.exists("DocType", "Common Area"):
+        common_area_docs = frappe.get_all(
+            "Common Area",
+            fields=["common_area_name"],
+            order_by="common_area_name asc",
+        )
+        common_areas = [ca["common_area_name"] for ca in common_area_docs]
+
     return {
         "success": True,
         "customerId": customer_id,
@@ -314,8 +324,8 @@ def get_customer_maintenance_data(customer_id):
         "priorityOptions": priority_options,
         "maintenanceTypes": maintenance_types,
         "maintenanceScopeOptions": maintenance_scope_options,
+        "commonAreas": common_areas,
     }
-
 
 import frappe
 from frappe import _
@@ -338,6 +348,7 @@ def create_maintenance_request(
     time_slot=None,
     maintenance_scope=None,     # one of VALID_SCOPES, validated below
     scope_reference=None,       # required when maintenance_scope != 'Asset'
+    common_area_location=None,  # required when maintenance_scope == 'Common Area'; replaces 'location' for that scope
 ):
     """
     POST API to create a Maintenance Request with multiple file uploads.
@@ -349,13 +360,14 @@ def create_maintenance_request(
       flat               → 203   (required only if maintenance_scope = "Asset")
       room               → Master Bed Room   (required only if maintenance_scope = "Asset")
       asset               → ACC-ASS-2026-00003   (required only if maintenance_scope = "Asset")
-      location            → adc
+      location            → adc   (not required if maintenance_scope = "Common Area")
       description         → abc
       phone_number        → 8281693215
       maintenance_date    → 2026-07-20   (required only if maintenance_scope = "Asset")
       time_slot           → 10:00 AM - 12:00 PM   (required only if maintenance_scope = "Asset")
       maintenance_scope   → Asset | Unit | Common Area | Building | Infrastructure | Landscape
       scope_reference     → e.g. "Unit 203" / "Lobby Common Area"  (required if scope != "Asset")
+      common_area_location → e.g. "Lobby"   (required only if maintenance_scope = "Common Area"; name of a Common Area Location doc — replaces 'location' for this scope)
       attachment_ids      → file1.jpg   (File type — select multiple files)
       attachment_ids      → file2.jpg   (add same key again for multiple)
     """
@@ -368,17 +380,24 @@ def create_maintenance_request(
         )
 
     is_asset_scope = maintenance_scope == "Asset"
+    is_common_area_scope = maintenance_scope == "Common Area"
 
     # ── Validate required fields ──────────────────────────────────
     required = {
         "customer":          customer,
         "priority":          priority,
         "maintenance_type":  maintenance_type,
-        "location":          location,
         "description":       description,
         "phone_number":      phone_number,
         "maintenance_scope": maintenance_scope,
     }
+
+    # 'location' is not needed for "Common Area" — 'common_area_location' is
+    # required instead. Every other scope keeps requiring 'location'.
+    if is_common_area_scope:
+        required["common_area_location"] = common_area_location
+    else:
+        required["location"] = location
 
     # flat, room, maintenance_date, time_slot are only mandatory for the
     # "Asset" scope; every other scope (Unit, Common Area, Building,
@@ -410,13 +429,14 @@ def create_maintenance_request(
     doc.flat                      = flat
     doc.room                      = room
     doc.asset                     = asset if is_asset_scope else None
-    doc.location                  = location
+    doc.location                  = location if not is_common_area_scope else None
     doc.description               = description
     doc.phone_number              = phone_number
     doc.maintenance_date          = maintenance_date
     doc.time_slot                 = time_slot
     doc.custom_maintenance_scope  = maintenance_scope
     doc.custom_scope_reference    = scope_reference if not is_asset_scope else None
+    doc.common_area_locations = common_area_location if is_common_area_scope else None
 
     doc.insert(ignore_permissions=False)
     doc.date_of_submit = frappe.utils.today()
@@ -530,6 +550,7 @@ def create_maintenance_request(
             "room":             doc.room,
             "asset":            doc.asset,
             "location":         doc.location,
+            "commonAreaLocation": doc.common_area_locations,
             "description":      doc.description,
             "phoneNumber":      doc.phone_number,
             "maintenanceDate":  str(doc.maintenance_date) if doc.maintenance_date else None,

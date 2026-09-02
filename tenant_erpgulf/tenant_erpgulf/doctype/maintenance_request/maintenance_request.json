@@ -17,6 +17,7 @@
   "asset",
   "custom_scope_reference",
   "location",
+  "common_area_locations",
   "column_break_jtex",
   "description",
   "phone_number",
@@ -145,13 +146,20 @@
    "fieldname": "custom_scope_reference",
    "fieldtype": "Data",
    "label": "Scope Reference"
+  },
+  {
+   "fieldname": "common_area_locations",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Common Area Locations",
+   "options": "Common Area"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-02 11:26:59.681666",
+ "modified": "2026-09-02 13:44:11.754890",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Maintenance Request",
