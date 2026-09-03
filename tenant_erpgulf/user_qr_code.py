@@ -578,6 +578,21 @@ def get_asset_maintenance_logs(
     """
     Returns paginated Asset Maintenance Logs for a given customer.
 
+    Handles every Maintenance Request scope, not just "Asset":
+        Asset | Unit | Common Area | Building | Infrastructure | Landscape
+
+    - Scope == "Asset"        -> resolved the old way, via Location -> Asset ->
+                                  (custom_asset for Reactive, Asset Maintenance.asset_name
+                                  for Planned).
+    - Scope != "Asset"        -> Maintenance Request.customer is the source of truth
+                                  (not every non-Asset request has a Location behind it).
+                                  We pull every Maintenance Request for this customer whose
+                                  scope isn't "Asset" and follow its maintenance_log field
+                                  straight to the Asset Maintenance Log record - no Location
+                                  or Asset lookup required. As a secondary net, we also match
+                                  Asset Maintenance Log.custom_scope_reference against the
+                                  customer's Location list, for the cases that *do* have one.
+
     Args:
         customer_id  : Customer ID (required)
         status       : "All" | "Open"  (default "All")
@@ -609,6 +624,8 @@ def get_asset_maintenance_logs(
         frappe.throw(_("customer_id is required"), frappe.MandatoryError)
 
     # ── Step 1: Get all Location names for this customer ──────────
+    # (Unit / Common Area / Building / Infrastructure / Landscape scope references
+    #  are all Location records, same as the locations Assets sit in.)
     locations = frappe.get_all(
         "Location",
         filters={"custom_customer": customer_id},
@@ -616,72 +633,138 @@ def get_asset_maintenance_logs(
     )
     location_names = [l["name"] for l in locations]
 
-    if not location_names:
-        return _empty_response(customer_id, status, limit_start, limit_end)
+    # NOTE: we deliberately do NOT short-circuit to an empty response when
+    # this customer has no Locations. Non-Asset scope requests can exist
+    # without any Location at all (see Path C below), so Locations only
+    # gate the Asset-based paths (A/B), not the whole function.
 
     # ── Step 2: Get all Asset IDs in those locations ──────────────
-    all_assets = frappe.get_all(
-        "Asset",
-        filters={"location": ["in", location_names]},
-        fields=["name"],
-    )
-    asset_ids = [a["name"] for a in all_assets]
-
-    if not asset_ids:
-        return _empty_response(customer_id, status, limit_start, limit_end)
+    asset_ids = []
+    if location_names:
+        all_assets = frappe.get_all(
+            "Asset",
+            filters={"location": ["in", location_names]},
+            fields=["name"],
+        )
+        asset_ids = [a["name"] for a in all_assets]
 
     # ─────────────────────────────────────────────────────────────
-    # PATH A — Reactive
+    # PATH A — Reactive, scope == Asset
     # assetId = custom_asset (directly available)
     # ─────────────────────────────────────────────────────────────
-    reactive_filters = {
-        "docstatus": ["in", [0, 1]],
-        "custom_asset_maintenance_type": "Reactive",
-        "custom_asset": ["in", asset_ids],
-    }
-    if status.lower() == "open":
-        reactive_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
-
-    reactive_logs = frappe.get_all(
-        "Asset Maintenance Log",
-        filters=reactive_filters,
-        fields=_log_fields(),
-        order_by="creation desc",
-    )
-
-    # ─────────────────────────────────────────────────────────────
-    # PATH B — Planned
-    # assetId = Asset Maintenance.asset_name (Asset ID stored there)
-    # ─────────────────────────────────────────────────────────────
-    am_records = frappe.get_all(
-        "Asset Maintenance",
-        filters={"asset_name": ["in", asset_ids]},
-        fields=["name", "asset_name"],
-    )
-    am_to_asset_id = {am["name"]: am["asset_name"] for am in am_records}
-    am_names = list(am_to_asset_id.keys())
-
-    planned_logs = []
-    if am_names:
-        planned_filters = {
+    reactive_logs = []
+    if asset_ids:
+        reactive_filters = {
             "docstatus": ["in", [0, 1]],
-            "custom_asset_maintenance_type": "Planned",
-            "asset_name": ["in", am_names],
+            "custom_asset_maintenance_type": "Reactive",
+            "custom_asset": ["in", asset_ids],
         }
         if status.lower() == "open":
-            planned_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
+            reactive_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
 
-        planned_logs = frappe.get_all(
+        reactive_logs = frappe.get_all(
             "Asset Maintenance Log",
-            filters=planned_filters,
+            filters=reactive_filters,
             fields=_log_fields(),
             order_by="creation desc",
         )
 
-    # ── Merge + deduplicate ───────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────
+    # PATH B — Planned, scope == Asset
+    # assetId = Asset Maintenance.asset_name (Asset ID stored there)
+    # ─────────────────────────────────────────────────────────────
+    am_to_asset_id = {}
+    planned_logs = []
+    if asset_ids:
+        am_records = frappe.get_all(
+            "Asset Maintenance",
+            filters={"asset_name": ["in", asset_ids]},
+            fields=["name", "asset_name"],
+        )
+        am_to_asset_id = {am["name"]: am["asset_name"] for am in am_records}
+        am_names = list(am_to_asset_id.keys())
+
+        if am_names:
+            planned_filters = {
+                "docstatus": ["in", [0, 1]],
+                "custom_asset_maintenance_type": "Planned",
+                "asset_name": ["in", am_names],
+            }
+            if status.lower() == "open":
+                planned_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
+
+            planned_logs = frappe.get_all(
+                "Asset Maintenance Log",
+                filters=planned_filters,
+                fields=_log_fields(),
+                order_by="creation desc",
+            )
+
+    # ─────────────────────────────────────────────────────────────
+    # PATH C1 — Non-Asset scopes, via Maintenance Request.customer
+    #           (primary path — works with or without a Location)
+    # Unit / Common Area / Building / Infrastructure / Landscape requests
+    # never go through an Asset. Rather than trying to derive them from a
+    # Location (which sometimes doesn't exist for these), go straight to
+    # Maintenance Request.customer and follow maintenance_log to the
+    # Asset Maintenance Log record.
+    # ─────────────────────────────────────────────────────────────
+    non_asset_mrs = frappe.get_all(
+        "Maintenance Request",
+        filters={
+            "customer": customer_id,
+            "custom_maintenance_scope": ["!=", "Asset"],
+        },
+        fields=["name", "maintenance_log", "custom_maintenance_scope", "custom_scope_reference"],
+    )
+    mr_scope_log_names = [mr["maintenance_log"] for mr in non_asset_mrs if mr.get("maintenance_log")]
+
+    scope_logs_by_mr = []
+    if mr_scope_log_names:
+        mr_scope_filters = {
+            "docstatus": ["in", [0, 1]],
+            "name": ["in", mr_scope_log_names],
+        }
+        if status.lower() == "open":
+            mr_scope_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
+
+        scope_logs_by_mr = frappe.get_all(
+            "Asset Maintenance Log",
+            filters=mr_scope_filters,
+            fields=_log_fields(),
+            order_by="creation desc",
+        )
+
+    # ─────────────────────────────────────────────────────────────
+    # PATH C2 — Non-Asset scopes, via Location match (secondary net)
+    # Catches logs whose custom_scope_reference does point at one of the
+    # customer's Locations, for whatever reason C1 might have missed them
+    # (e.g. the Maintenance Request record itself was deleted/renamed).
+    # ─────────────────────────────────────────────────────────────
+    scope_logs_by_location = []
+    if location_names:
+        loc_scope_filters = {
+            "docstatus": ["in", [0, 1]],
+            "custom_scope_reference": ["in", location_names],
+        }
+        if status.lower() == "open":
+            loc_scope_filters["maintenance_status"] = ["in", ["Planned", "Overdue"]]
+
+        scope_logs_by_location = frappe.get_all(
+            "Asset Maintenance Log",
+            filters=loc_scope_filters,
+            fields=_log_fields(),
+            order_by="creation desc",
+        )
+
+    if not reactive_logs and not planned_logs and not scope_logs_by_mr and not scope_logs_by_location:
+        return _empty_response(customer_id, status, limit_start, limit_end)
+
+    # ── Merge + deduplicate (a log could theoretically satisfy more
+    #    than one path — dedup keeps it once) ──────────────────────
     seen = set()
     combined_logs = []
-    for log in reactive_logs + planned_logs:
+    for log in reactive_logs + planned_logs + scope_logs_by_mr + scope_logs_by_location:
         if log["name"] not in seen:
             seen.add(log["name"])
             combined_logs.append(log)
@@ -696,25 +779,36 @@ def get_asset_maintenance_logs(
     total_pages   = math.ceil(total_count / page_size) if page_size else 1
     current_page  = (limit_start // page_size) + 1 if page_size else 1
 
-    # ── Pre-fetch Maintenance Request IDs for all paged logs in one query ──
+    # ── Pre-fetch Maintenance Request info for all paged logs in one query ──
+    # (also pulls custom_maintenance_scope so the response can tell the
+    # caller which scope each log belongs to)
     paged_log_names = [log["name"] for log in paged_logs]
     mr_records = frappe.get_all(
         "Maintenance Request",
         filters={"maintenance_log": ["in", paged_log_names]},
-        fields=["name", "maintenance_log"],
+        fields=["name", "maintenance_log", "custom_maintenance_scope", "custom_scope_reference"],
     )
-    # Map: aml_name → mr_name
-    aml_to_mr = {mr["maintenance_log"]: mr["name"] for mr in mr_records}
+    # Maps keyed by aml_name (Asset Maintenance Log.name)
+    aml_to_mr        = {mr["maintenance_log"]: mr["name"] for mr in mr_records}
+    aml_to_mr_scope  = {mr["maintenance_log"]: mr.get("custom_maintenance_scope") for mr in mr_records}
 
     # ── Build final response ──────────────────────────────────────
     logs = []
     for log in paged_logs:
+        scope_reference = log.get("custom_scope_reference")
+
         if log.get("custom_asset_maintenance_type") == "Reactive":
             asset_id  = log.get("custom_asset")
             task_name = log.get("custom_name_of_task")
         else:
             asset_id  = am_to_asset_id.get(log.get("asset_name"))
             task_name = log.get("task_name")
+
+        # Prefer the scope recorded on the linked Maintenance Request; fall
+        # back to inferring it from whichever reference is populated on the log.
+        maintenance_scope = aml_to_mr_scope.get(log["name"])
+        if not maintenance_scope:
+            maintenance_scope = "Asset" if asset_id else ("Other" if scope_reference else None)
 
         items_raw = frappe.get_all(
             "Stock Items For Asset",
@@ -734,9 +828,11 @@ def get_asset_maintenance_logs(
         logs.append(
             {
                 "name":                  log["name"],
-                "maintenanceRequestId":  aml_to_mr.get(log["name"]),           # ← NEW
+                "maintenanceRequestId":  aml_to_mr.get(log["name"]),
                 "assetName":             log["asset_name"],
                 "assetId":               asset_id,
+                "maintenanceScope":      maintenance_scope,          # ← NEW: Asset / Unit / Common Area / Building / Infrastructure / Landscape
+                "scopeReference":        scope_reference,            # ← NEW: Location behind a non-Asset scope
                 "taskName":              task_name,
                 "maintenanceStatus":     log["maintenance_status"],
                 "maintenanceType":       log["maintenance_type"],
@@ -795,6 +891,7 @@ def _log_fields():
         "maintenance_type",
         "custom_maintenance_types",
         "custom_asset",
+        "custom_scope_reference",
         "custom_asset_maintenance_type",
         "custom_assign_to",
         "assign_to_name",
@@ -826,7 +923,6 @@ def _empty_response(customer_id, status, limit_start, limit_end):
             "hasPrevPage": False,
         },
     }
-
 
 @frappe.whitelist(allow_guest=False)
 def get_maintenance_log_details(log_id):
@@ -869,6 +965,7 @@ def get_maintenance_log_details(log_id):
                 "custom_maintenance_types",
                 "custom_asset_maintenance_type",
                 "custom_asset",
+                "custom_scope_reference",
                 "custom_assign_to",
                 "assign_to_name",
                 "periodicity",
@@ -877,11 +974,26 @@ def get_maintenance_log_details(log_id):
             as_dict=True,
         )
 
-        # ── STEP 4: Look up the linked Maintenance Request ID ──────────────────
-        maintenance_request_id = frappe.db.get_value(
+        # ── STEP 4: Look up the linked Maintenance Request — pull its scope too ─
+        maintenance_request = frappe.db.get_value(
             "Maintenance Request",
             {"maintenance_log": log_id},
-            "name",
+            ["name", "custom_maintenance_scope", "custom_scope_reference"],
+            as_dict=True,
+        )
+
+        maintenance_request_id = maintenance_request.get("name") if maintenance_request else None
+
+        # Scope: "Asset" | "Unit" | "Common Area" | "Building" | "Infrastructure" |
+        # "Landscape". Prefer the value on the Maintenance Request (source of
+        # truth); fall back to the Asset Maintenance Log's own field if the
+        # Maintenance Request wasn't found for some reason.
+        maintenance_scope = (
+            maintenance_request.get("custom_maintenance_scope") if maintenance_request else None
+        )
+        scope_reference = (
+            (maintenance_request.get("custom_scope_reference") if maintenance_request else None)
+            or log.get("custom_scope_reference")
         )
 
         # ── STEP 5: Build response based on Reactive vs Planned ───────────────
@@ -890,7 +1002,7 @@ def get_maintenance_log_details(log_id):
         if log_type == "Reactive":
             response_data = {
                 "name":                          log.get("name"),
-                "maintenanceRequestId":          maintenance_request_id or None,   # ← NEW
+                "maintenanceRequestId":          maintenance_request_id or None,
                 "asset_name":                    log.get("custom_asset") or "",
                 "task_name":                     log.get("custom_name_of_task"),
                 "maintenance_status":            log.get("maintenance_status"),
@@ -904,7 +1016,7 @@ def get_maintenance_log_details(log_id):
         else:  # Planned
             response_data = {
                 "name":                          log.get("name"),
-                "maintenanceRequestId":          maintenance_request_id or None,   # ← NEW
+                "maintenanceRequestId":          maintenance_request_id or None,
                 "asset_name":                    log.get("asset_name") or "",
                 "task_name":                     log.get("task_name"),
                 "maintenance_status":            log.get("maintenance_status"),
@@ -914,6 +1026,14 @@ def get_maintenance_log_details(log_id):
                 "periodicity":                   log.get("periodicity"),
                 "completion_date":               log.get("completion_date"),
             }
+
+        # custom_maintenance_scope + custom_scope_reference — only Unit / Common
+        # Area / Building / Infrastructure / Landscape requests carry a scope
+        # reference; Asset-scoped requests already have asset_name/asset above.
+        response_data["custom_maintenance_scope"] = maintenance_scope
+        response_data["custom_scope_reference"] = (
+            scope_reference if maintenance_scope and maintenance_scope != "Asset" else None
+        )
 
         # ── STEP 6: Fetch Stock Items (custom_items child table) ───────────────
         stock_items = frappe.get_all(
