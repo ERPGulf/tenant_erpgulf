@@ -266,7 +266,11 @@ doc_events = {
     },
     "Asset Maintenance Log": {
         "on_submit": "tenant_erpgulf.asset.on_submit",
-        "validate": "tenant_erpgulf.reschedule_validation.validate_reschedule_history",
+        # "validate": "tenant_erpgulf.reschedule_validation.validate_reschedule_history",
+        "validate": [
+            "tenant_erpgulf.reschedule_validation.validate_reschedule_history",
+            "tenant_erpgulf.maintenance_re.fetch_actual_qty_from_bin",
+        ],
         "on_update": "tenant_erpgulf.task_duration.set_task_duration_fields",
     },
     "Employee": {

@@ -210,10 +210,38 @@ from frappe import _
 
 
 @frappe.whitelist(allow_guest=False)
-def get_customer_maintenance_data(customer_id):
+def get_customer_maintenance_data(customer_id, language="en"):
 
     if not customer_id:
         frappe.throw(_("customer_id is required"), frappe.MandatoryError)
+
+    # ── Resolve and apply requested language ───────────────────────
+    language = (language or "en").strip().lower()
+    if language not in ("ar", "en"):
+        frappe.throw(_("language must be 'ar' or 'en'"), frappe.ValidationError)
+
+    frappe.local.lang = language  # makes _() below translate into this language
+
+    # ── Customer name: use ZATCA Arabic name when language=ar AND it has a value ──
+    customer_name_en = frappe.db.get_value("Customer", customer_id, "customer_name")
+
+    customer_name_ar = None
+    try:
+        customer_meta = frappe.get_meta("Customer")
+        ar_fieldname = None
+        for candidate in ("zatca_customer_name_in_arabic", "custom_zatca_customer_name_in_arabic"):
+            if customer_meta.get_field(candidate):
+                ar_fieldname = candidate
+                break
+        if ar_fieldname:
+            customer_name_ar = frappe.db.get_value("Customer", customer_id, ar_fieldname)
+    except Exception:
+        pass
+
+    if language == "ar" and customer_name_ar:
+        customer_name = customer_name_ar
+    else:
+        customer_name = customer_name_en
 
     flat_docs = frappe.get_all(
         "Location",
@@ -246,12 +274,12 @@ def get_customer_maintenance_data(customer_id):
             rooms.append(
                 {
                     "roomId": room["name"],
-                    "roomName": room["room_name"],
+                    "roomName": _(room["room_name"]) if room["room_name"] else room["room_name"],
                     "assets": [
                         {
                             "assetId": a["name"],
-                            "assetName": a["asset_name"],
-                            "itemCode": a["item_code"],
+                            "assetName": _(a["asset_name"]) if a["asset_name"] else a["asset_name"],
+                            "itemCode": _(a["item_code"]) if a["item_code"] else a["item_code"],
                         }
                         for a in assets_raw
                     ],
@@ -272,7 +300,7 @@ def get_customer_maintenance_data(customer_id):
         meta = frappe.get_meta("Maintenance Request")
         pf = meta.get_field("priority")
         if pf and pf.fieldtype == "Select" and pf.options:
-            priority_options = [o.strip() for o in pf.options.split("\n") if o.strip()]
+            priority_options = [_(o.strip()) for o in pf.options.split("\n") if o.strip()]
     except Exception:
         pass
 
@@ -283,7 +311,7 @@ def get_customer_maintenance_data(customer_id):
             fields=["name"],
             order_by="name asc",
         )
-        maintenance_types = [mt["name"] for mt in mt_list]
+        maintenance_types = [_(mt["name"]) for mt in mt_list]
     except Exception:
         pass
 
@@ -293,7 +321,7 @@ def get_customer_maintenance_data(customer_id):
         scope_field = mr_meta.get_field("custom_maintenance_scope")
         if scope_field and scope_field.fieldtype == "Select" and scope_field.options:
             maintenance_scope_options = [
-                o.strip() for o in scope_field.options.split("\n") if o.strip()
+                _(o.strip()) for o in scope_field.options.split("\n") if o.strip()
             ]
     except Exception:
         pass
@@ -304,7 +332,7 @@ def get_customer_maintenance_data(customer_id):
     )
     if not has_common_area_access:
         maintenance_scope_options = [
-            opt for opt in maintenance_scope_options if opt != "Common Area"
+            opt for opt in maintenance_scope_options if opt != _("Common Area")
         ]
 
     # ── Common Area Locations (only fetched when the customer has access) ──
@@ -315,18 +343,19 @@ def get_customer_maintenance_data(customer_id):
             fields=["common_area_name"],
             order_by="common_area_name asc",
         )
-        common_areas = [ca["common_area_name"] for ca in common_area_docs]
+        common_areas = [_(ca["common_area_name"]) for ca in common_area_docs]
 
     return {
         "success": True,
         "customerId": customer_id,
+        "customerName": customer_name,
+        "language": language,
         "flats": flats,
         "priorityOptions": priority_options,
         "maintenanceTypes": maintenance_types,
         "maintenanceScopeOptions": maintenance_scope_options,
         "commonAreas": common_areas,
     }
-
 import frappe
 from frappe import _
 

@@ -119,3 +119,20 @@ def create_maintenance_log_from_request(maintenance_request):
         "success": True,
         "maintenance_log": log.name
     }
+
+
+ 
+def fetch_actual_qty_from_bin(doc, method=None):
+    """doc_events handler: doc = Asset Maintenance Log, method = 'validate'."""
+ 
+    for row in doc.get("custom_items", []):
+        if row.item_code and row.s_warehouse:
+            actual_qty = frappe.db.get_value(
+                "Bin",
+                {"item_code": row.item_code, "warehouse": row.s_warehouse},
+                "actual_qty",
+            )
+            row.actual_qty = actual_qty or 0
+        else:
+            row.actual_qty = 0
+ 
