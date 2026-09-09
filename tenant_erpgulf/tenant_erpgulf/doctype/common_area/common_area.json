@@ -7,7 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "common_area_name",
-  "description"
+  "description",
+  "common_area_arabic"
  ],
  "fields": [
   {
@@ -20,12 +21,17 @@
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "common_area_arabic",
+   "fieldtype": "Data",
+   "label": "Common Area Arabic"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-02 12:39:12.814866",
+ "modified": "2026-09-08 17:02:11.671574",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Common Area",

@@ -222,41 +222,80 @@ def get_customer_maintenance_data(customer_id, language="en"):
 
     frappe.local.lang = language  # makes _() below translate into this language
 
+    def pick(en_value, ar_value):
+        """Use the Arabic value only when language=ar AND it actually has a
+        value; otherwise fall back to the English value."""
+        if language == "ar" and ar_value:
+            return ar_value
+        return en_value
+
+    def resolve_field(doctype, candidates):
+        """Return the first fieldname from `candidates` that actually exists
+        on `doctype`, or None if none of them do. Lets us tolerate a custom
+        field being created with or without the 'custom_' prefix."""
+        try:
+            meta = frappe.get_meta(doctype)
+            for candidate in candidates:
+                if meta.get_field(candidate):
+                    return candidate
+        except Exception:
+            pass
+        return None
+
     # ── Customer name: use ZATCA Arabic name when language=ar AND it has a value ──
     customer_name_en = frappe.db.get_value("Customer", customer_id, "customer_name")
 
     customer_name_ar = None
-    try:
-        customer_meta = frappe.get_meta("Customer")
-        ar_fieldname = None
-        for candidate in ("zatca_customer_name_in_arabic", "custom_zatca_customer_name_in_arabic"):
-            if customer_meta.get_field(candidate):
-                ar_fieldname = candidate
-                break
-        if ar_fieldname:
-            customer_name_ar = frappe.db.get_value("Customer", customer_id, ar_fieldname)
-    except Exception:
-        pass
+    customer_ar_field = resolve_field(
+        "Customer", ("zatca_customer_name_in_arabic", "custom_zatca_customer_name_in_arabic")
+    )
+    if customer_ar_field:
+        customer_name_ar = frappe.db.get_value("Customer", customer_id, customer_ar_field)
 
-    if language == "ar" and customer_name_ar:
-        customer_name = customer_name_ar
-    else:
-        customer_name = customer_name_en
+    customer_name = pick(customer_name_en, customer_name_ar)
+
+    # ── Resolve which Arabic fieldnames actually exist (checked once) ──────
+    location_ar_field = resolve_field(
+        "Location", ("custom_location_name_arabic", "location_name_arabic")
+    )
+    room_ar_field = resolve_field(
+        "Room Equipment", ("room_name_arabic", "custom_room_name_arabic")
+    )
+    asset_ar_field = resolve_field(
+        "Asset", ("custom_asset_name_arabic", "asset_name_arabic")
+    )
+
+    location_fields = ["name", "location_name", "custom_flat_number"]
+    if location_ar_field:
+        location_fields.append(location_ar_field)
+
+    room_fields = ["name", "room_name"]
+    if room_ar_field:
+        room_fields.append(room_ar_field)
+
+    asset_fields = ["name", "asset_name", "item_code"]
+    if asset_ar_field:
+        asset_fields.append(asset_ar_field)
 
     flat_docs = frappe.get_all(
         "Location",
         filters={"custom_customer": customer_id},
-        fields=["name", "location_name", "custom_flat_number"],
+        fields=location_fields,
     )
 
     flats = []
     for flat in flat_docs:
         flat_name = flat["name"]
 
+        location_name_display = pick(
+            flat["location_name"],
+            flat.get(location_ar_field) if location_ar_field else None,
+        )
+
         rooms_raw = frappe.get_all(
             "Room Equipment",
             filters={"parent": flat_name, "parenttype": "Location"},
-            fields=["name", "room_name"],
+            fields=room_fields,
             order_by="idx asc",
         )
 
@@ -268,17 +307,25 @@ def get_customer_maintenance_data(customer_id, language="en"):
                     "location": flat_name,
                     "custom_room_name": room["room_name"],
                 },
-                fields=["name", "asset_name", "item_code"],
+                fields=asset_fields,
+            )
+
+            room_name_display = pick(
+                room["room_name"],
+                room.get(room_ar_field) if room_ar_field else None,
             )
 
             rooms.append(
                 {
                     "roomId": room["name"],
-                    "roomName": _(room["room_name"]) if room["room_name"] else room["room_name"],
+                    "roomName": room_name_display,
                     "assets": [
                         {
                             "assetId": a["name"],
-                            "assetName": _(a["asset_name"]) if a["asset_name"] else a["asset_name"],
+                            "assetName": pick(
+                                a["asset_name"],
+                                a.get(asset_ar_field) if asset_ar_field else None,
+                            ),
                             "itemCode": _(a["item_code"]) if a["item_code"] else a["item_code"],
                         }
                         for a in assets_raw
@@ -289,7 +336,7 @@ def get_customer_maintenance_data(customer_id, language="en"):
         flats.append(
             {
                 "flatId": flat_name,
-                "locationName": flat["location_name"],
+                "locationName": location_name_display,
                 "flatNumber": flat["custom_flat_number"],
                 "rooms": rooms,
             }
@@ -338,12 +385,26 @@ def get_customer_maintenance_data(customer_id, language="en"):
     # ── Common Area Locations (only fetched when the customer has access) ──
     common_areas = []
     if has_common_area_access and frappe.db.exists("DocType", "Common Area"):
+        common_area_ar_field = resolve_field(
+            "Common Area", ("common_area_arabic", "custom_common_area_arabic")
+        )
+
+        common_area_fields = ["common_area_name"]
+        if common_area_ar_field:
+            common_area_fields.append(common_area_ar_field)
+
         common_area_docs = frappe.get_all(
             "Common Area",
-            fields=["common_area_name"],
+            fields=common_area_fields,
             order_by="common_area_name asc",
         )
-        common_areas = [_(ca["common_area_name"]) for ca in common_area_docs]
+        common_areas = [
+            pick(
+                ca["common_area_name"],
+                ca.get(common_area_ar_field) if common_area_ar_field else None,
+            )
+            for ca in common_area_docs
+        ]
 
     return {
         "success": True,
@@ -603,43 +664,8 @@ def get_asset_maintenance_logs(
     status      = "All",
     limit_start : int = 0,
     limit_end   : int = 20,
+    language    = "en",
 ):
-    """
-    Returns paginated Asset Maintenance Logs for a given customer.
-
-    Handles every Maintenance Request scope, not just "Asset":
-        Asset | Unit | Common Area | Building | Infrastructure | Landscape
-
-    - Scope == "Asset"        -> resolved the old way, via Location -> Asset ->
-                                  (custom_asset for Reactive, Asset Maintenance.asset_name
-                                  for Planned).
-    - Scope != "Asset"        -> Maintenance Request.customer is the source of truth
-                                  (not every non-Asset request has a Location behind it).
-                                  We pull every Maintenance Request for this customer whose
-                                  scope isn't "Asset" and follow its maintenance_log field
-                                  straight to the Asset Maintenance Log record - no Location
-                                  or Asset lookup required. As a secondary net, we also match
-                                  Asset Maintenance Log.custom_scope_reference against the
-                                  customer's Location list, for the cases that *do* have one.
-
-    Args:
-        customer_id  : Customer ID (required)
-        status       : "All" | "Open"  (default "All")
-        limit_start  : Zero-based offset — first record to return (default 0)
-        limit_end    : Last record index (exclusive), i.e. page size = limit_end - limit_start
-                       e.g. limit_start=0, limit_end=20  → page 1 (records 1-20)
-                            limit_start=20, limit_end=40 → page 2 (records 21-40)
-
-    Response includes:
-        pagination.totalCount   : total matching records (before slicing)
-        pagination.limit_start  : echoed back
-        pagination.limit_end    : echoed back
-        pagination.pageSize     : limit_end - limit_start
-        pagination.totalPages   : ceil(totalCount / pageSize)
-        pagination.currentPage  : 1-based current page number
-        pagination.hasNextPage  : bool
-        pagination.hasPrevPage  : bool
-    """
 
     # ── Cast to int (whitelist passes everything as string) ───────
     limit_start = int(limit_start)
@@ -651,6 +677,38 @@ def get_asset_maintenance_logs(
 
     if not customer_id:
         frappe.throw(_("customer_id is required"), frappe.MandatoryError)
+
+    # ── Resolve and apply requested language ───────────────────────
+    language = (language or "en").strip().lower()
+    if language not in ("ar", "en"):
+        frappe.throw(_("language must be 'ar' or 'en'"), frappe.ValidationError)
+
+    frappe.local.lang = language  # makes _() below translate into this language
+
+    def pick(en_value, ar_value):
+        """Use the Arabic value only when language=ar AND it actually has a
+        value; otherwise fall back to the English value."""
+        if language == "ar" and ar_value:
+            return ar_value
+        return en_value
+
+    def resolve_field(doctype, candidates):
+        """Return the first fieldname from `candidates` that actually exists
+        on `doctype`, or None if none of them do."""
+        try:
+            meta = frappe.get_meta(doctype)
+            for candidate in candidates:
+                if meta.get_field(candidate):
+                    return candidate
+        except Exception:
+            pass
+        return None
+
+    # ── Resolve dedicated Arabic fieldnames once (not per-record) ──────────
+    asset_ar_field      = resolve_field("Asset", ("custom_asset_name_arabic", "asset_name_arabic"))
+    item_ar_field       = resolve_field("Item", ("custom_item_name_arabic", "item_name_arabic"))
+    warehouse_ar_field  = resolve_field("Warehouse", ("custom_warehouse_name_arabic", "warehouse_name_arabic"))
+    complaint_ar_field  = resolve_field("Complaint List", ("task_name_arabic", "custom_task_name_arabic"))
 
     # ── Step 1: Get all Location names for this customer ──────────
     # (Unit / Common Area / Building / Infrastructure / Landscape scope references
@@ -787,7 +845,7 @@ def get_asset_maintenance_logs(
         )
 
     if not reactive_logs and not planned_logs and not scope_logs_by_mr and not scope_logs_by_location:
-        return _empty_response(customer_id, status, limit_start, limit_end)
+        return _empty_response(customer_id, status, limit_start, limit_end, language)
 
     # ── Merge + deduplicate (a log could theoretically satisfy more
     #    than one path — dedup keeps it once) ──────────────────────
@@ -827,17 +885,41 @@ def get_asset_maintenance_logs(
         scope_reference = log.get("custom_scope_reference")
 
         if log.get("custom_asset_maintenance_type") == "Reactive":
-            asset_id  = log.get("custom_asset")
-            task_name = log.get("custom_name_of_task")
+            asset_id      = log.get("custom_asset")
+            task_name_raw = log.get("custom_name_of_task")
         else:
-            asset_id  = am_to_asset_id.get(log.get("asset_name"))
-            task_name = log.get("task_name")
+            asset_id      = am_to_asset_id.get(log.get("asset_name"))
+            task_name_raw = log.get("task_name")
 
         # Prefer the scope recorded on the linked Maintenance Request; fall
         # back to inferring it from whichever reference is populated on the log.
         maintenance_scope = aml_to_mr_scope.get(log["name"])
         if not maintenance_scope:
             maintenance_scope = "Asset" if asset_id else ("Other" if scope_reference else None)
+
+        # ── Asset name: dedicated Arabic field on the Asset doctype ────────
+        asset_name_display = log["asset_name"]
+        if asset_id:
+            asset_fields = ["asset_name"]
+            if asset_ar_field:
+                asset_fields.append(asset_ar_field)
+            asset_doc = frappe.db.get_value("Asset", asset_id, asset_fields, as_dict=True)
+            if asset_doc:
+                asset_name_display = pick(
+                    asset_doc.get("asset_name") or log["asset_name"],
+                    asset_doc.get(asset_ar_field) if asset_ar_field else None,
+                )
+
+        # ── Task name: task_name / custom_name_of_task is a Link to
+        #    "Complaint List", whose task_name_arabic holds the Arabic text ──
+        task_name_display = task_name_raw
+        if task_name_raw and complaint_ar_field:
+            try:
+                if frappe.db.exists("Complaint List", task_name_raw):
+                    task_name_ar = frappe.db.get_value("Complaint List", task_name_raw, complaint_ar_field)
+                    task_name_display = pick(task_name_raw, task_name_ar)
+            except Exception:
+                pass
 
         items_raw = frappe.get_all(
             "Stock Items For Asset",
@@ -854,22 +936,51 @@ def get_asset_maintenance_logs(
             order_by="idx asc",
         )
 
+        # ── itemName: dedicated Arabic field on the Item doctype ───────────
+        item_codes = list({item["item_code"] for item in items_raw if item.get("item_code")})
+        item_name_by_code = {}
+        if item_codes:
+            item_fields = ["name", "item_name"]
+            if item_ar_field:
+                item_fields.append(item_ar_field)
+            item_docs = frappe.get_all("Item", filters={"name": ["in", item_codes]}, fields=item_fields)
+            item_name_by_code = {
+                d["name"]: pick(d.get("item_name"), d.get(item_ar_field) if item_ar_field else None)
+                for d in item_docs
+            }
+
+        # ── warehouse: dedicated Arabic field on the Warehouse doctype ─────
+        warehouse_codes = list({item["s_warehouse"] for item in items_raw if item.get("s_warehouse")})
+        warehouse_name_by_code = {}
+        if warehouse_codes:
+            wh_fields = ["name", "warehouse_name"]
+            if warehouse_ar_field:
+                wh_fields.append(warehouse_ar_field)
+            wh_docs = frappe.get_all("Warehouse", filters={"name": ["in", warehouse_codes]}, fields=wh_fields)
+            warehouse_name_by_code = {
+                d["name"]: pick(
+                    d.get("warehouse_name") or d["name"],
+                    d.get(warehouse_ar_field) if warehouse_ar_field else None,
+                )
+                for d in wh_docs
+            }
+
         logs.append(
             {
                 "name":                  log["name"],
                 "maintenanceRequestId":  aml_to_mr.get(log["name"]),
-                "assetName":             log["asset_name"],
+                "assetName":             asset_name_display,
                 "assetId":               asset_id,
-                "maintenanceScope":      maintenance_scope,          # ← NEW: Asset / Unit / Common Area / Building / Infrastructure / Landscape
-                "scopeReference":        scope_reference,            # ← NEW: Location behind a non-Asset scope
-                "taskName":              task_name,
-                "maintenanceStatus":     log["maintenance_status"],
-                "maintenanceType":       log["maintenance_type"],
-                "customMaintenanceType": log["custom_maintenance_types"],
-                "assetMaintenanceType":  log["custom_asset_maintenance_type"],
+                "maintenanceScope":      _(maintenance_scope) if maintenance_scope else maintenance_scope,
+                "scopeReference":        _(scope_reference) if scope_reference else scope_reference,
+                "taskName":              task_name_display,
+                "maintenanceStatus":     _(log["maintenance_status"]) if log.get("maintenance_status") else log["maintenance_status"],
+                "maintenanceType":       _(log["maintenance_type"]) if log.get("maintenance_type") else log["maintenance_type"],
+                "customMaintenanceType": _(log["custom_maintenance_types"]) if log.get("custom_maintenance_types") else log["custom_maintenance_types"],
+                "assetMaintenanceType":  _(log["custom_asset_maintenance_type"]) if log.get("custom_asset_maintenance_type") else log["custom_asset_maintenance_type"],
                 "assignTo":              log["custom_assign_to"],
-                "assignToName":          log["assign_to_name"],
-                "periodicity":           log["periodicity"],
+                "assignToName":          _(log["assign_to_name"]) if log.get("assign_to_name") else log["assign_to_name"],
+                "periodicity":           _(log["periodicity"]) if log.get("periodicity") else log["periodicity"],
                 "completionDate":        str(log["completion_date"]) if log.get("completion_date") else None,
                 "hasCertificate":        bool(log["has_certificate"]),
                 "description":           log["description"],
@@ -880,11 +991,12 @@ def get_asset_maintenance_logs(
                     {
                         "id":               item["name"],
                         "itemCode":         item["item_code"],
+                        "itemName":         item_name_by_code.get(item["item_code"]),
                         "qty":              item["qty"],
-                        "uom":              item["uom"],
-                        "stockUom":         item["stock_uom"],
+                        "uom":              _(item["uom"]) if item.get("uom") else item["uom"],
+                        "stockUom":         _(item["stock_uom"]) if item.get("stock_uom") else item["stock_uom"],
                         "conversionFactor": item["conversion_factor"],
-                        "warehouse":        item["s_warehouse"],
+                        "warehouse":        warehouse_name_by_code.get(item["s_warehouse"]) if item.get("s_warehouse") else item.get("s_warehouse"),
                     }
                     for item in items_raw
                 ],
@@ -895,6 +1007,7 @@ def get_asset_maintenance_logs(
         "success":    True,
         "customerId": customer_id,
         "status":     status,
+        "language":   language,
         "count":      len(logs),
         "logs":       logs,
         "pagination": {
@@ -934,11 +1047,12 @@ def _log_fields():
     ]
 
 
-def _empty_response(customer_id, status, limit_start, limit_end):
+def _empty_response(customer_id, status, limit_start, limit_end, language="en"):
     return {
         "success":    True,
         "customerId": customer_id,
         "status":     status,
+        "language":   language,
         "count":      0,
         "logs":       [],
         "pagination": {
@@ -953,9 +1067,52 @@ def _empty_response(customer_id, status, limit_start, limit_end):
         },
     }
 
+import json
+import frappe
+from frappe import _
+from werkzeug.wrappers import Response
+
+
 @frappe.whitelist(allow_guest=False)
-def get_maintenance_log_details(log_id):
+def get_maintenance_log_details(log_id, language="en"):
     try:
+        # ── STEP 0: Resolve and apply requested language ───────────────────────
+        language = (language or "en").strip().lower()
+        if language not in ("ar", "en"):
+            return Response(
+                json.dumps({
+                    "status": "error",
+                    "message": "language must be 'ar' or 'en'",
+                }),
+                status=400,
+                mimetype="application/json",
+            )
+        frappe.local.lang = language  # makes _() below translate into this language
+
+        def pick(en_value, ar_value):
+            """Use the Arabic value only when language=ar AND it actually has a
+            value; otherwise fall back to the English value."""
+            if language == "ar" and ar_value:
+                return ar_value
+            return en_value
+
+        def resolve_field(doctype, candidates):
+            """Return the first fieldname from `candidates` that actually exists
+            on `doctype`, or None if none of them do."""
+            try:
+                meta = frappe.get_meta(doctype)
+                for candidate in candidates:
+                    if meta.get_field(candidate):
+                        return candidate
+            except Exception:
+                pass
+            return None
+
+        asset_ar_field     = resolve_field("Asset", ("custom_asset_name_arabic", "asset_name_arabic"))
+        item_ar_field      = resolve_field("Item", ("custom_item_name_arabic", "item_name_arabic"))
+        warehouse_ar_field = resolve_field("Warehouse", ("custom_warehouse_name_arabic", "warehouse_name_arabic"))
+        complaint_ar_field = resolve_field("Complaint List", ("task_name_arabic", "custom_task_name_arabic"))
+
         # ── STEP 1: Identify user from Bearer token ────────────────────────────
         current_user = frappe.session.user
 
@@ -1029,39 +1186,61 @@ def get_maintenance_log_details(log_id):
         log_type = log.get("custom_asset_maintenance_type")
 
         if log_type == "Reactive":
-            response_data = {
-                "name":                          log.get("name"),
-                "maintenanceRequestId":          maintenance_request_id or None,
-                "asset_name":                    log.get("custom_asset") or "",
-                "task_name":                     log.get("custom_name_of_task"),
-                "maintenance_status":            log.get("maintenance_status"),
-                "maintenance_category":          log.get("custom_maintenance_types") or "",
-                "custom_asset_maintenance_type": log_type,
-                "assign_to":                     log.get("custom_assign_to") or "",
-                "periodicity":                   log.get("periodicity"),
-                "completion_date":               log.get("completion_date"),
-            }
-
+            asset_link_val = log.get("custom_asset") or ""
+            task_name_val   = log.get("custom_name_of_task")
+            category_val    = log.get("custom_maintenance_types") or ""
+            assign_to_val   = log.get("custom_assign_to") or ""
         else:  # Planned
-            response_data = {
-                "name":                          log.get("name"),
-                "maintenanceRequestId":          maintenance_request_id or None,
-                "asset_name":                    log.get("asset_name") or "",
-                "task_name":                     log.get("task_name"),
-                "maintenance_status":            log.get("maintenance_status"),
-                "maintenance_category":          log.get("maintenance_type") or "",
-                "custom_asset_maintenance_type": log_type,
-                "assign_to":                     log.get("assign_to_name") or "",
-                "periodicity":                   log.get("periodicity"),
-                "completion_date":               log.get("completion_date"),
-            }
+            asset_link_val = log.get("asset_name") or ""
+            task_name_val   = log.get("task_name")
+            category_val    = log.get("maintenance_type") or ""
+            assign_to_val   = log.get("assign_to_name") or ""
+
+        # ── asset_name: dedicated Arabic field on the Asset doctype ────────────
+        asset_name_display = asset_link_val
+        if asset_link_val:
+            asset_fields = ["asset_name"]
+            if asset_ar_field:
+                asset_fields.append(asset_ar_field)
+            asset_doc = frappe.db.get_value("Asset", asset_link_val, asset_fields, as_dict=True)
+            if asset_doc:
+                asset_name_display = pick(
+                    asset_doc.get("asset_name") or asset_link_val,
+                    asset_doc.get(asset_ar_field) if asset_ar_field else None,
+                )
+
+        # ── task_name: task_name / custom_name_of_task is a Link to
+        #    "Complaint List", whose task_name_arabic holds the Arabic text ──
+        task_name_display = task_name_val
+        if task_name_val and complaint_ar_field:
+            try:
+                if frappe.db.exists("Complaint List", task_name_val):
+                    task_name_ar = frappe.db.get_value("Complaint List", task_name_val, complaint_ar_field)
+                    task_name_display = pick(task_name_val, task_name_ar)
+            except Exception:
+                pass
+
+        response_data = {
+            "name":                          log.get("name"),
+            "maintenanceRequestId":          maintenance_request_id or None,
+            "asset_name":                    asset_name_display,
+            "task_name":                     task_name_display,
+            "maintenance_status":            log.get("maintenance_status"),
+            "maintenance_category":          _(category_val) if category_val else category_val,
+            "custom_asset_maintenance_type": _(log_type) if log_type else log_type,
+            "assign_to":                     assign_to_val,
+            "periodicity":                   log.get("periodicity"),
+            "completion_date":               log.get("completion_date"),
+        }
 
         # custom_maintenance_scope + custom_scope_reference — only Unit / Common
         # Area / Building / Infrastructure / Landscape requests carry a scope
         # reference; Asset-scoped requests already have asset_name/asset above.
-        response_data["custom_maintenance_scope"] = maintenance_scope
+        response_data["custom_maintenance_scope"] = _(maintenance_scope) if maintenance_scope else maintenance_scope
         response_data["custom_scope_reference"] = (
-            scope_reference if maintenance_scope and maintenance_scope != "Asset" else None
+            (_(scope_reference) if scope_reference else scope_reference)
+            if maintenance_scope and maintenance_scope != "Asset"
+            else None
         )
 
         # ── STEP 6: Fetch Stock Items (custom_items child table) ───────────────
@@ -1078,6 +1257,45 @@ def get_maintenance_log_details(log_id):
                 "s_warehouse",
             ],
         )
+
+        # ── item_name: dedicated Arabic field on the Item doctype ──────────────
+        item_codes = list({item["item_code"] for item in stock_items if item.get("item_code")})
+        item_name_by_code = {}
+        if item_codes:
+            item_fields = ["name", "item_name"]
+            if item_ar_field:
+                item_fields.append(item_ar_field)
+            item_docs = frappe.get_all("Item", filters={"name": ["in", item_codes]}, fields=item_fields)
+            item_name_by_code = {
+                d["name"]: pick(d.get("item_name"), d.get(item_ar_field) if item_ar_field else None)
+                for d in item_docs
+            }
+
+        # ── s_warehouse: dedicated Arabic field on the Warehouse doctype ───────
+        warehouse_codes = list({item["s_warehouse"] for item in stock_items if item.get("s_warehouse")})
+        warehouse_name_by_code = {}
+        if warehouse_codes:
+            wh_fields = ["name", "warehouse_name"]
+            if warehouse_ar_field:
+                wh_fields.append(warehouse_ar_field)
+            wh_docs = frappe.get_all("Warehouse", filters={"name": ["in", warehouse_codes]}, fields=wh_fields)
+            warehouse_name_by_code = {
+                d["name"]: pick(
+                    d.get("warehouse_name") or d["name"],
+                    d.get(warehouse_ar_field) if warehouse_ar_field else None,
+                )
+                for d in wh_docs
+            }
+
+        for item in stock_items:
+            item["item_name"] = item_name_by_code.get(item.get("item_code"))
+            if item.get("uom"):
+                item["uom"] = _(item["uom"])
+            if item.get("stock_uom"):
+                item["stock_uom"] = _(item["stock_uom"])
+            if item.get("s_warehouse"):
+                item["s_warehouse"] = warehouse_name_by_code.get(item["s_warehouse"], item["s_warehouse"])
+
         response_data["custom_items"] = stock_items
 
         # ── STEP 7: Return response ────────────────────────────────────────────
@@ -1085,6 +1303,7 @@ def get_maintenance_log_details(log_id):
             json.dumps(
                 {
                     "status": "success",
+                    "language": language,
                     "data": response_data,
                 },
                 default=str

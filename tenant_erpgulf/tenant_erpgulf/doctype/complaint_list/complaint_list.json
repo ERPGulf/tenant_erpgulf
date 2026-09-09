@@ -7,7 +7,8 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "name1"
+  "name1",
+  "task_name_arabic"
  ],
  "fields": [
   {
@@ -15,12 +16,17 @@
    "fieldtype": "Data",
    "label": "Name",
    "unique": 1
+  },
+  {
+   "fieldname": "task_name_arabic",
+   "fieldtype": "Data",
+   "label": "Task Name Arabic"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-15 21:46:50.829829",
+ "modified": "2026-09-08 17:10:37.453142",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Complaint List",
