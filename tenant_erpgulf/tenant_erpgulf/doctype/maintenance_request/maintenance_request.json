@@ -134,7 +134,7 @@
    "fieldname": "time_slot",
    "fieldtype": "Select",
    "label": "Time Slot",
-   "options": "\n9-10 AM\n10-11 AM\n11-12 PM\n12-1 PM\n2-3 PM\n3-4 PM\n4-5 PM"
+   "options": "\n9-10 AM\n10-11 AM\n11-12 PM\n12-1 PM\n2-3 PM\n3-4 PM\n4-5 PM\n5-6 PM\n6-7 PM\n7-8 PM\n8-9 PM\n9-10 PM\n10-11 PM"
   },
   {
    "fieldname": "custom_maintenance_scope",
@@ -159,7 +159,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-09-02 13:44:11.754890",
+ "modified": "2026-09-22 10:00:00.411252",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Maintenance Request",
