@@ -378,6 +378,35 @@ RATING_BUCKETS = [
 # hardcode the real fieldname) once you check the child doctype definition.
 SUPERVISOR_REMARK_FIELDS = ["remark", "remarks", "note", "comment", "alert", "description"]
 
+# See the "IMPORTANT" comment in get_data() -- change this if your app's
+# Completion Date field on Asset Maintenance Log has a different fieldname.
+COMPLETION_DATE_FIELD = "completion_date"
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def is_email(value):
+	return bool(value) and bool(_EMAIL_RE.match(str(value).strip()))
+
+
+def get_technician_key(log):
+	"""
+	The technician is normally identified by task_assignee_email on the
+	Asset Maintenance Log. Some logs instead (or additionally) carry
+	custom_assign_to -- if THAT field holds an email address, use it too,
+	so a log doesn't get dropped/mis-grouped just because
+	task_assignee_email is blank but custom_assign_to was set instead.
+
+	task_assignee_email is preferred when both are present and valid;
+	custom_assign_to is only used as a fallback, and only when it actually
+	looks like an email (custom_assign_to can also hold a plain name in
+	some records, which isn't useful for the Employee.user_id lookup).
+	"""
+	for candidate in (log.get("task_assignee_email"), log.get("custom_assign_to")):
+		if is_email(candidate):
+			return candidate.strip()
+	return log.get("task_assignee_email") or log.get("custom_assign_to") or None
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -412,28 +441,65 @@ def get_data(filters):
 	# (docstatus 1) ones -- a technician's job shouldn't disappear from the
 	# report just because the log hasn't been submitted yet. Only cancelled
 	# (docstatus 2) rows are excluded.
-	log_filters = {
-		"due_date": ["between", [from_date, to_date]],
-		"docstatus": ["!=", 2],
-	}
+	base_filters = {"docstatus": ["!=", 2]}
 
+	# IMPORTANT: filtering on due_date alone was silently dropping Reactive
+	# maintenance logs from the report. Reactive/breakdown jobs (e.g. an
+	# ad-hoc "AC Repair") often don't carry a due_date the way scheduled
+	# Planned/Preventive jobs do -- they're logged and finished the same
+	# day, tracked instead by "Completion Date" on the form. A row with a
+	# blank due_date can never fall inside a BETWEEN filter, so it never
+	# showed up in ANY month's report, regardless of when it was actually
+	# done. We now pull in a log if EITHER its due_date OR its
+	# completion_date falls inside the selected month, so both scheduled
+	# and reactive jobs are counted.
+	#
+	# ASSUMPTION: the "Completion Date" field seen on the Asset Maintenance
+	# Log form is named "completion_date". If your app uses a different
+	# fieldname for it, change COMPLETION_DATE_FIELD below.
+	aml_meta = frappe.get_meta("Asset Maintenance Log")
+	has_completion_date = aml_meta.has_field(COMPLETION_DATE_FIELD)
+
+	wanted_technician_email = None
 	if filters.get("technician"):
-		email = frappe.db.get_value("Employee", filters.get("technician"), "user_id")
-		if email:
-			log_filters["task_assignee_email"] = email
+		wanted_technician_email = frappe.db.get_value("Employee", filters.get("technician"), "user_id")
 
-	logs = frappe.get_all(
-		"Asset Maintenance Log",
-		filters=log_filters,
-		fields=[
-			"name", "task_assignee_email", "assign_to_name", "custom_rating",
-			"custom_completed", "maintenance_status", "due_date", "creation",
-		],
-	)
+	log_fields = [
+		"name", "task_assignee_email", "custom_assign_to", "assign_to_name",
+		"custom_rating", "custom_completed", "maintenance_status", "due_date", "creation",
+	]
+
+	# task_assignee_email / custom_assign_to are resolved per-row further down
+	# (via get_technician_key), so the technician filter is applied in python
+	# below rather than as a single-field DB filter here.
+	if has_completion_date:
+		logs = frappe.get_all(
+			"Asset Maintenance Log",
+			filters=base_filters,
+			or_filters=[
+				["due_date", "between", [from_date, to_date]],
+				[COMPLETION_DATE_FIELD, "between", [from_date, to_date]],
+			],
+			fields=log_fields + [COMPLETION_DATE_FIELD],
+		)
+	else:
+		# Fall back to due_date only if completion_date isn't a real field
+		# on this doctype in your app (rather than raising a DB error on an
+		# unknown column).
+		logs = frappe.get_all(
+			"Asset Maintenance Log",
+			filters=dict(base_filters, due_date=["between", [from_date, to_date]]),
+			fields=log_fields,
+		)
 	if not logs:
 		return []
 
-	emails = list({d.task_assignee_email for d in logs if d.task_assignee_email})
+	if wanted_technician_email:
+		logs = [d for d in logs if get_technician_key(d) == wanted_technician_email]
+		if not logs:
+			return []
+
+	emails = list({get_technician_key(d) for d in logs if get_technician_key(d)})
 	employees = {
 		e.user_id: e
 		for e in frappe.get_all(
@@ -446,7 +512,7 @@ def get_data(filters):
 	if filters.get("department"):
 		wanted_dept = filters.get("department")
 		keep_emails = {uid for uid, e in employees.items() if e.department == wanted_dept}
-		logs = [d for d in logs if d.task_assignee_email in keep_emails]
+		logs = [d for d in logs if get_technician_key(d) in keep_emails]
 		if not logs:
 			return []
 
@@ -466,7 +532,7 @@ def get_data(filters):
 
 	grouped = {}
 	for log in logs:
-		key = log.task_assignee_email or log.assign_to_name or "Unassigned"
+		key = get_technician_key(log) or log.assign_to_name or "Unassigned"
 		grouped.setdefault(key, []).append(log)
 
 	rows = []
