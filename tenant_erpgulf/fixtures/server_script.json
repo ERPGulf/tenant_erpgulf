@@ -28,7 +28,7 @@
   "doctype_event": "Before Save",
   "enable_rate_limit": 0,
   "event_frequency": "All",
-  "modified": "2026-07-22 09:17:45.076125",
+  "modified": "2026-09-26 20:20:05.982322",
   "module": "tenant_erpgulf",
   "name": "Notification Send",
   "rate_limit_count": 5,

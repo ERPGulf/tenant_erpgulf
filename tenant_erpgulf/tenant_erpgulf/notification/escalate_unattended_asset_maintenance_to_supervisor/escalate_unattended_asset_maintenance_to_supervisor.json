@@ -17,7 +17,7 @@
  "message": "<p>Dear Supervisor,</p>\n    <p>\n    {% if doc.custom_employee_work_status == \"New\" %}\n    The complaint <b>{{ doc.name }}</b> assigned to {{ doc.assign_to_name or doc.custom_assign_to }} has not been attended for 3 days.\n    {% else %}\n    The work order <b>{{ doc.name }}</b> assigned to {{ doc.assign_to_name or doc.custom_assign_to }} is still \"{{ doc.custom_employee_work_status }}\" and has not been completed within 3 days.\n    {% endif %}\n    </p>\n    <p>Please follow up.</p>",
  "message_type": "HTML",
  "minutes_offset": 0,
- "modified": "2026-07-22 11:30:48.018797",
+ "modified": "2026-09-30 09:32:42.910991",
  "modified_by": "Administrator",
  "module": "tenant_erpgulf",
  "name": "Escalate Unattended Asset Maintenance to Supervisor",
@@ -25,6 +25,9 @@
  "recipients": [
   {
    "receiver_by_role": "Supervisor"
+  },
+  {
+   "receiver_by_role": "Facility Manager"
   }
  ],
  "send_system_notification": 1,

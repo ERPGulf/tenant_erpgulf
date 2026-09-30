@@ -20,7 +20,6 @@ from werkzeug.wrappers import Response
 # ════════════════════════════════════════════════════════════════════════════════
 
 
-
 @frappe.whitelist(allow_guest=False)
 def get_employee_tasks():
     try:
@@ -88,7 +87,7 @@ def get_employee_tasks():
             ref_type = todo.get("reference_type")
 
             if ref_type == "Asset Maintenance Log":
-                # ── Reactive: read the log directly, no parent hop needed ──────
+                # ── Read the log directly ──────────────────────────────────────
                 if ref_name and frappe.db.exists("Asset Maintenance Log", ref_name):
                     log = frappe.db.get_value(
                         "Asset Maintenance Log",
@@ -96,6 +95,8 @@ def get_employee_tasks():
                         [
                             "name",
                             "asset_name",
+                            "task",
+                            "custom_name_of_task",
                             "custom_employee_work_status",
                             "custom_asset_maintenance_type",
                         ],
@@ -104,7 +105,13 @@ def get_employee_tasks():
                     if log:
                         work_status      = log.get("custom_employee_work_status")
                         maintenance_type = log.get("custom_asset_maintenance_type")
-                        task_name        = log.get("asset_name")
+
+                        if maintenance_type == "Reactive":
+                            # Reactive task name lives in custom_name_of_task
+                            task_name = log.get("custom_name_of_task")
+                        else:
+                            # Planned task name lives in task
+                            task_name = log.get("task")
 
             elif ref_type == "Asset Maintenance":
                 # ── Planned/preventive: parent + child task + linked log ───────
@@ -191,6 +198,70 @@ def get_employee_tasks():
             status=500,
             mimetype="application/json",
         )
+import json
+import frappe
+from werkzeug.wrappers import Response
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _get_title(doctype, docname):
+    """Return the doc's title field value (if the doctype has one), else its name."""
+    if not doctype or not docname:
+        return None
+    try:
+        if not frappe.db.exists(doctype, docname):
+            return docname
+        title_field = frappe.get_meta(doctype).title_field
+        if title_field and title_field != "name":
+            return frappe.db.get_value(doctype, docname, title_field) or docname
+    except Exception:
+        pass
+    return docname
+
+
+def _get_link_values(doctype, docname, fieldname):
+    """
+    Read a field that is either a plain Link, or a Table / Table MultiSelect
+    of links. Always returns a list of linked names.
+    """
+    meta = frappe.get_meta(doctype)
+    df = meta.get_field(fieldname)
+    if not df:
+        return []
+
+    if df.fieldtype in ("Table", "Table MultiSelect"):
+        child_meta = frappe.get_meta(df.options)
+        link_field = next(
+            (f.fieldname for f in child_meta.fields if f.fieldtype == "Link"),
+            None,
+        )
+        if not link_field:
+            return []
+        rows = frappe.get_all(
+            df.options,
+            filters={"parent": docname, "parenttype": doctype, "parentfield": fieldname},
+            fields=[link_field],
+            order_by="idx asc",
+        )
+        return [r.get(link_field) for r in rows if r.get(link_field)]
+
+    value = frappe.db.get_value(doctype, docname, fieldname)
+    return [value] if value else []
+
+
+def _empty_location(name=None):
+    return {
+        "name":       name,
+        "tower":      None,
+        "floor":      None,
+        "room":       None,
+        "building":   None,
+        "compound":   None,
+        "flatNumber": None,
+    }
+
+
 @frappe.whitelist(allow_guest=False)
 def get_employee_task_detail(task_id):
     try:
@@ -223,11 +294,7 @@ def get_employee_task_detail(task_id):
                 status=403, mimetype="application/json",
             )
 
-        # ── STEP 4: Resolve the Asset Maintenance Log ───────────────────────────
-        # reference_type on the ToDo can be either:
-        #   - "Asset Maintenance Log"  → reference_name IS the log, use directly
-        #   - "Asset Maintenance"      → reference_name is the parent; find the
-        #                                log linked to it via `asset_maintenance`
+        # ── STEP 4: Resolve the Asset Maintenance Log ──────────────────────────
         ref_name = todo.get("reference_name")
         ref_type = todo.get("reference_type")
 
@@ -269,6 +336,7 @@ def get_employee_task_detail(task_id):
             [
                 "name",
                 "task_name",
+                "custom_name_of_task",
                 "custom_asset_maintenance_type",
                 "custom_asset",
                 "asset_name",
@@ -282,17 +350,45 @@ def get_employee_task_detail(task_id):
             as_dict=True,
         )
 
-        # ── STEP 5: Resolve Asset → location + room + name/code ────────────────
-        # custom_asset_maintenance_type decides which AML field holds the Asset ID:
-        #   Reactive  -> custom_asset
-        #   Planned   -> asset_name (this AML field is actually a Link to Asset)
-        # Whichever branch we're in, asset_id ends up normalized, so everything
-        # fetched from the Asset doc below (and the response keys built from it)
-        # is identical in shape for both Reactive and Planned tasks.
-        is_reactive   = aml.get("custom_asset_maintenance_type") == "Reactive"
-        asset_id      = aml.get("custom_asset") if is_reactive else aml.get("asset_name")
+        is_reactive = aml.get("custom_asset_maintenance_type") == "Reactive"
 
-        location_name   = None
+        # ── STEP 5: Maintenance Request (maintenance_log = aml_name) ───────────
+        # Decides HOW location is resolved via custom_maintenance_scope:
+        #   "Asset" (or no MR / empty scope) → Asset → Location → Floor → Building
+        #   "Common Area"                    → location name from common_area_locations
+        #   anything else (Unit, Building,
+        #   Infrastructure, Landscape, ...)  → location name from MR.location
+        # For non-Asset scopes, details come from custom_scope_reference.
+        mr_name = frappe.db.get_value(
+            "Maintenance Request",
+            {"maintenance_log": aml_name},
+            "name",
+        )
+
+        mr = None
+        if mr_name:
+            mr = frappe.db.get_value(
+                "Maintenance Request",
+                mr_name,
+                [
+                    "name",
+                    "date_of_submit",
+                    "description",
+                    "location",
+                    "custom_maintenance_scope",
+                    "custom_scope_reference",
+                ],
+                as_dict=True,
+            )
+
+        maintenance_scope = (mr.get("custom_maintenance_scope") if mr else None) or "Asset"
+        is_asset_scope = maintenance_scope == "Asset"
+
+        # ── STEP 6: Asset details (same as before) ─────────────────────────────
+        #   Reactive → custom_asset, Planned → asset_name (Link to Asset)
+        asset_id = aml.get("custom_asset") if is_reactive else aml.get("asset_name")
+
+        asset_location  = None
         room            = None
         asset_name_val  = None
         asset_item_code = None
@@ -305,55 +401,95 @@ def get_employee_task_detail(task_id):
                 ["location", "custom_room_name", "asset_name", "item_code", "item_name"],
                 as_dict=True,
             )
-            location_name   = asset_doc.get("location")
+            asset_location  = asset_doc.get("location")
             room            = asset_doc.get("custom_room_name") or None
             asset_name_val  = asset_doc.get("asset_name")
             asset_item_code = asset_doc.get("item_code")
             asset_item_name = asset_doc.get("item_name")
 
-        # ── STEP 6: Resolve Location → Floor → Building (tower) ───────────────
-        tower        = None
-        floor        = None
-        customer_id  = None
-        building     = None
-        compound     = None
-        flat_number  = None
+        # ── STEP 7: Location (depends on scope) ────────────────────────────────
+        location_block = _empty_location()
+        customer_id = None
+        scope_block = {
+            "type":          maintenance_scope,
+            "reference":     None,
+            "referenceName": None,
+        }
 
-        if location_name and frappe.db.exists("Location", location_name):
-            location = frappe.db.get_value(
-                "Location",
-                location_name,
-                ["custom_floor", "custom_customer", "custom_flat_number", "custom_building", "custom_compound"],
-                as_dict=True,
-            )
+        if is_asset_scope:
+            # ── 7a: Asset scope → full Location → Floor → Building chain ──────
+            location_name = asset_location
+            tower = floor = building = compound = flat_number = None
 
-            customer_id = location.get("custom_customer")
-            building    = location.get("custom_building")
-            compound    = location.get("custom_compound")
-            flat_number = location.get("custom_flat_number")
-
-            # room fallback: use custom_flat_number from Location if Asset has none
-            if not room and location.get("custom_flat_number"):
-                room = location.get("custom_flat_number")
-
-            # floor → building → tower
-            if location.get("custom_floor"):
-                floor_doc = frappe.db.get_value(
-                    "Floor",
-                    location["custom_floor"],
-                    ["name", "building"],
+            if location_name and frappe.db.exists("Location", location_name):
+                location = frappe.db.get_value(
+                    "Location",
+                    location_name,
+                    ["custom_floor", "custom_customer", "custom_flat_number", "custom_building", "custom_compound"],
                     as_dict=True,
                 )
-                if floor_doc:
-                    floor = floor_doc.get("name")
-                    if floor_doc.get("building"):
-                        tower = frappe.db.get_value(
-                            "Building",
-                            floor_doc["building"],
-                            "building_name",
-                        )
 
-        # ── STEP 7: Resolve Customer → reportedBy ─────────────────────────────
+                customer_id = location.get("custom_customer")
+                building    = location.get("custom_building")
+                compound    = location.get("custom_compound")
+                flat_number = location.get("custom_flat_number")
+
+                # room fallback: use custom_flat_number from Location if Asset has none
+                if not room and flat_number:
+                    room = flat_number
+
+                if location.get("custom_floor"):
+                    floor_doc = frappe.db.get_value(
+                        "Floor",
+                        location["custom_floor"],
+                        ["name", "building"],
+                        as_dict=True,
+                    )
+                    if floor_doc:
+                        floor = floor_doc.get("name")
+                        if floor_doc.get("building"):
+                            tower = frappe.db.get_value(
+                                "Building",
+                                floor_doc["building"],
+                                "building_name",
+                            )
+
+            location_block = {
+                "name":       location_name,
+                "tower":      tower,
+                "floor":      floor,
+                "room":       room,
+                "building":   building,
+                "compound":   compound,
+                "flatNumber": flat_number,
+            }
+
+        else:
+            # ── 7b: Non-Asset scope → only location NAME ──────────────────────
+            if maintenance_scope == "Common Area":
+                # common_area_locations → Common Area (Link or Table MultiSelect)
+                common_areas = _get_link_values("Maintenance Request", mr_name, "common_area_locations")
+                location_display = ", ".join(
+                    _get_title("Common Area", ca) for ca in common_areas
+                ) or None
+            else:
+                # Unit / Building / Infrastructure / Landscape / ... → MR.location
+                location_display = mr.get("location") or None
+
+            location_block = _empty_location(location_display)
+
+            # ── 7c: Details from custom_scope_reference ────────────────────────
+            scope_ref = mr.get("custom_scope_reference")
+            if scope_ref:
+                scope_block["reference"] = scope_ref
+                # If the scope value is a DocType name (e.g. "Unit", "Building"),
+                # resolve the reference's title from that DocType.
+                ref_title = None
+                if frappe.db.exists("DocType", maintenance_scope):
+                    ref_title = _get_title(maintenance_scope, scope_ref)
+                scope_block["referenceName"] = ref_title or scope_ref
+
+        # ── STEP 8: Resolve Customer → reportedBy (Asset scope only) ──────────
         reported_by = {"id": None, "name": None}
 
         if customer_id and frappe.db.exists("Customer", customer_id):
@@ -363,34 +499,15 @@ def get_employee_task_detail(task_id):
                 "name": customer_name or customer_id,
             }
 
-        # ── STEP 8: Find Maintenance Request where maintenance_log = aml_name ──
+        # ── STEP 9: Reported on / description / attachments from MR ──────────
         reported_on = None
         description = None
         attachments = []
 
-        mr_name = frappe.db.get_value(
-            "Maintenance Request",
-            {"maintenance_log": aml_name},
-            "name",
-        )
+        if mr:
+            reported_on = str(mr.get("date_of_submit")) if mr.get("date_of_submit") else None
+            description = mr.get("description") or None
 
-        frappe.log_error(
-            title="[get_employee_task_detail] MR lookup",
-            message=f"aml_name={aml_name} | mr_name={mr_name}"
-        )
-
-        if mr_name:
-            mr = frappe.db.get_value(
-                "Maintenance Request",
-                mr_name,
-                ["date_of_submit", "description"],
-                as_dict=True,
-            )
-            if mr:
-                reported_on = str(mr.get("date_of_submit")) if mr.get("date_of_submit") else None
-                description = mr.get("description") or None
-
-            # ── STEP 8a: Fetch attachments from the Maintenance Request ────────
             site_url = frappe.utils.get_url()
             raw_files = frappe.db.get_all(
                 "File",
@@ -412,9 +529,9 @@ def get_employee_task_detail(task_id):
                     "uploadedAt": str(f.get("creation")) if f.get("creation") else None,
                 })
 
-        # ── STEP 9a: Resolve maintenance team based on maintenance type ────────
-        # Reactive  → custom_maintenance_team field directly on the AML
-        # Planned   → AML.asset_maintenance (link) → Asset Maintenance doc → maintenance_team field
+        # ── STEP 10a: Maintenance team ────────────────────────────────────────
+        # Reactive → custom_maintenance_team on AML
+        # Planned  → AML.asset_maintenance → Asset Maintenance.maintenance_team
         maintenance_team = None
         asset_maintenance_name = aml.get("asset_maintenance")
 
@@ -428,10 +545,7 @@ def get_employee_task_detail(task_id):
                     "maintenance_team",
                 ) or None
 
-        # ── STEP 9b: Resolve assignedTo ─────────────────────────────────────────
-        # Reactive  → custom_assign_to (User) directly on the AML
-        # Planned   → assign_to / assign_to_name live on the Asset Maintenance Task
-        #             child row, not on the AML — go fetch that row instead.
+        # ── STEP 10b: assignedTo ──────────────────────────────────────────────
         assigned_to = {"id": None, "name": None, "team": None}
 
         if is_reactive:
@@ -450,8 +564,6 @@ def get_employee_task_detail(task_id):
                 }
         else:
             if asset_maintenance_name and frappe.db.exists("Asset Maintenance", asset_maintenance_name):
-                # Prefer the row matching this AML's task_name (in case a parent
-                # Asset Maintenance has multiple task rows for different employees).
                 task_rows = frappe.get_all(
                     "Asset Maintenance Task",
                     filters={"parent": asset_maintenance_name, "maintenance_task": aml.get("task_name")},
@@ -473,7 +585,7 @@ def get_employee_task_detail(task_id):
                         "team": maintenance_team,
                     }
 
-        # ── STEP 10: Status + priority maps ───────────────────────────────────
+        # ── STEP 11: Status + priority maps ───────────────────────────────────
         STATUS_MAP = {
             "In Progress": "in_progress",
             "On Hold":     "on_hold",
@@ -487,24 +599,22 @@ def get_employee_task_detail(task_id):
             "Urgent": "urgent",
         }
 
-        # ── STEP 11: Build response ────────────────────────────────────────────
+        # Reactive task name → custom_name_of_task, Planned → task_name
+        if is_reactive:
+            task_display_name = aml.get("custom_name_of_task") or aml.get("task_name")
+        else:
+            task_display_name = aml.get("task_name")
+
+        # ── STEP 12: Build response ───────────────────────────────────────────
         result = {
             "id":       todo["name"],
-            "name":     aml.get("task_name") or aml_name,
+            "name":     task_display_name or aml_name,
             "status":   STATUS_MAP.get(aml.get("custom_employee_work_status"), "in_progress"),
             "priority": PRIORITY_MAP.get(todo.get("priority"), "medium"),
             "category": aml.get("custom_maintenance_types") or None,
             "type":     aml.get("custom_asset_maintenance_type"),
-            "location": {
-                "tower":      tower,
-                "floor":      floor,
-                "room":       room,
-                "building":   building,
-                "compound":   compound,
-                "flatNumber": flat_number,
-            },
-            # Same shape/keys regardless of Reactive vs Planned, since asset_id
-            # was already normalized in STEP 5.
+            "scope":    scope_block,
+            "location": location_block,
             "asset": {
                 "id":        asset_id,
                 "assetName": asset_name_val,
@@ -539,199 +649,6 @@ def get_employee_task_detail(task_id):
             status=500, mimetype="application/json",
         )
 
-
-# @frappe.whitelist(allow_guest=False)
-# def update_employee_task_status(task_id, status, date=None, reason=None):
-#     """
-#     Update the Employee Work Status on the Asset Maintenance Log linked to a ToDo.
-
-#     Args:
-#         task_id : ToDo document name (e.g. "dhb3c0s6dn")
-#         status  : One of "in_progress" | "on_hold" | "completed"
-#         date    : Optional date string (YYYY-MM-DD). Only applied to completion_date
-#                   when status == "completed". Ignored for all other statuses.
-#         reason  : Required when status == "on_hold" (reason for the hold).
-#                   Ignored for all other statuses.
-#     """
-#     try:
-#         # ── STEP 1: Auth ───────────────────────────────────────────────────────
-#         current_user = frappe.session.user
-#         if not current_user or current_user == "Guest":
-#             return Response(
-#                 json.dumps({"status": "error", "message": "Unauthorized. Please provide a valid Bearer token."}),
-#                 status=401, mimetype="application/json",
-#             )
-
-#         # ── STEP 2: Validate + map incoming status ─────────────────────────────
-#         # API accepts: in_progress | on_hold | completed
-#         # Stored in doctype as: In Progress | On Hold | Completed
-#         STATUS_MAP = {
-#             "in_progress": "In Progress",
-#             "on_hold":     "On Hold",
-#             "completed":   "Completed",
-#         }
-
-#         status_key = (status or "").strip().lower()
-#         if status_key not in STATUS_MAP:
-#             return Response(
-#                 json.dumps({
-#                     "status":  "error",
-#                     "message": f"Invalid status '{status}'. Allowed values: {list(STATUS_MAP.keys())}",
-#                 }),
-#                 status=400, mimetype="application/json",
-#             )
-
-#         db_status = STATUS_MAP[status_key]
-
-#         # ── STEP 2b: Reason is required for on_hold, ignored otherwise ─────────
-#         reason = (reason or "").strip() if reason else ""
-#         if status_key == "on_hold" and not reason:
-#             return Response(
-#                 json.dumps({
-#                     "status":  "error",
-#                     "message": "Reason is required when status is 'on_hold'.",
-#                 }),
-#                 status=400, mimetype="application/json",
-#             )
-
-#         # ── STEP 3: Fetch the ToDo ─────────────────────────────────────────────
-#         if not frappe.db.exists("ToDo", task_id):
-#             return Response(
-#                 json.dumps({"status": "error", "message": f"Task '{task_id}' not found"}),
-#                 status=404, mimetype="application/json",
-#             )
-
-#         todo = frappe.db.get_value(
-#             "ToDo",
-#             task_id,
-#             ["name", "reference_name", "reference_type", "allocated_to"],
-#             as_dict=True,
-#         )
-
-#         # ── STEP 4: Verify task belongs to this user ───────────────────────────
-#         if todo.get("allocated_to") != current_user:
-#             return Response(
-#                 json.dumps({"status": "error", "message": "You do not have access to this task."}),
-#                 status=403, mimetype="application/json",
-#             )
-
-#         # ── STEP 5: Resolve the Asset Maintenance Log ───────────────────────────
-#         # reference_type on the ToDo can be either:
-#         #   - "Asset Maintenance Log"  → reference_name IS the log, use directly
-#         #   - "Asset Maintenance"      → reference_name is the parent; find the
-#         #                                log linked to it via `asset_maintenance`
-#         ref_name = todo.get("reference_name")
-#         ref_type = todo.get("reference_type")
-
-#         if ref_type not in ("Asset Maintenance Log", "Asset Maintenance"):
-#             return Response(
-#                 json.dumps({"status": "error", "message": "This task is not linked to an Asset Maintenance Log."}),
-#                 status=400, mimetype="application/json",
-#             )
-
-#         aml_name = None
-
-#         if ref_type == "Asset Maintenance Log":
-#             if ref_name and frappe.db.exists("Asset Maintenance Log", ref_name):
-#                 aml_name = ref_name
-
-#         elif ref_type == "Asset Maintenance":
-#             if ref_name and frappe.db.exists("Asset Maintenance", ref_name):
-#                 matching_logs = frappe.get_all(
-#                     "Asset Maintenance Log",
-#                     filters={"asset_maintenance": ref_name, "custom_assign_to": current_user},
-#                     fields=["name"],
-#                     order_by="creation desc",
-#                     limit_page_length=1,
-#                 )
-#                 if not matching_logs:
-#                     matching_logs = frappe.get_all(
-#                         "Asset Maintenance Log",
-#                         filters={"asset_maintenance": ref_name},
-#                         fields=["name"],
-#                         order_by="creation desc",
-#                         limit_page_length=1,
-#                     )
-#                 if matching_logs:
-#                     aml_name = matching_logs[0]["name"]
-
-#         # ── STEP 6: Fetch the Asset Maintenance Log ────────────────────────────
-#         if not aml_name or not frappe.db.exists("Asset Maintenance Log", aml_name):
-#             return Response(
-#                 json.dumps({"status": "error", "message": f"Asset Maintenance Log for reference '{ref_name}' not found"}),
-#                 status=404, mimetype="application/json",
-#             )
-
-#         aml = frappe.get_doc("Asset Maintenance Log", aml_name)
-
-#         # ── STEP 7: Update custom_employee_work_status ─────────────────────────
-#         aml.custom_employee_work_status = db_status
-
-#         # ── STEP 7b: On hold → store the reason. Clear it once status moves on.
-#         if status_key == "on_hold":
-#             aml.custom_hold_reason = reason
-#         else:
-#             aml.custom_hold_reason = None
-
-#         # ── STEP 8: If Completed → also update maintenance_status + completion_date
-#         if status_key == "completed":
-#             aml.maintenance_status = "Completed"
-#             if date:
-#                 aml.completion_date = date
-#             else:
-#                 # fallback to today if no date provided
-#                 aml.completion_date = frappe.utils.nowdate()
-
-#         # ── STEP 9: Save (no submit, no validation bypass) ────────────────────
-#         aml.save(ignore_permissions=True)
-#         frappe.db.commit()
-
-#         frappe.log_error(
-#             title="[update_employee_task_status] SUCCESS",
-#             message=f"task_id={task_id} | aml={aml_name} | status={db_status} | date={date} | reason={reason}"
-#         )
-
-#         # ── STEP 10: Build response ────────────────────────────────────────────
-#         response_data = {
-#             "status":  "success",
-#             "message": f"Task status updated to '{db_status}' successfully.",
-#             "data": {
-#                 "taskId":               task_id,
-#                 "maintenanceLogId":     aml_name,
-#                 "employeeWorkStatus":   db_status,
-#                 "maintenanceStatus":    aml.maintenance_status,
-#                 "completionDate":       str(aml.completion_date) if aml.completion_date else None,
-#                 "holdReason":           aml.custom_hold_reason,
-#             }
-#         }
-
-#         return Response(
-#             json.dumps(response_data, default=str),
-#             status=200,
-#             mimetype="application/json",
-#         )
-
-#     except frappe.ValidationError as e:
-#         return Response(
-#             json.dumps({"status": "error", "message": str(e)}),
-#             status=400, mimetype="application/json",
-#         )
-
-#     except frappe.PermissionError:
-#         return Response(
-#             json.dumps({"status": "error", "message": "You do not have permission to perform this action."}),
-#             status=403, mimetype="application/json",
-#         )
-
-#     except Exception as e:
-#         frappe.log_error(
-#             title="update_employee_task_status error",
-#             message=frappe.get_traceback()
-#         )
-#         return Response(
-#             json.dumps({"status": "error", "message": str(e)}),
-#             status=500, mimetype="application/json",
-#         )
 @frappe.whitelist(allow_guest=False)
 def update_employee_task_status(task_id, status, date=None, reason=None, note=None):
     """

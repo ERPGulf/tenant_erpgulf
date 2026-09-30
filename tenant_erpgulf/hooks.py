@@ -293,11 +293,15 @@ doctype_js = {
 doctype_list_js = {
     "Location": "public/js/location.js"
 }
+
 scheduler_events = {
     "cron": {
-        "37 8 * * *": [  # 8:30 PM every night
+        "30 20 * * *": [  # 8:30 PM every night
             "tenant_erpgulf.notification.auto_cancel_overdue_maintenance_logs"
-        ]
+        ],
+        "5 0 * * *": [  # 12:05 AM every night - Location customer sync
+            "tenant_erpgulf.tenant_erpgulf.doctype.customer_move_log.customer_move_log.sync_all_locations"
+        ],
     }
 }
 

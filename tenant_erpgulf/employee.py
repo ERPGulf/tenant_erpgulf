@@ -201,6 +201,112 @@ import frappe
 from werkzeug.wrappers import Response
 
 
+# ── Field lists (same as before, shared by asset + non-asset logs) ────────────
+REACTIVE_LOG_FIELDS = [
+    "name",
+    "asset_name",
+    "custom_name_of_task",  # Reactive task name lives here
+    "maintenance_status",
+    "maintenance_type",
+    "custom_maintenance_types",
+    "custom_asset_maintenance_type",
+    "custom_asset",
+    "completion_date",
+    "custom_assign_to",
+    "assign_to_name",
+]
+
+PLANNED_LOG_FIELDS = [
+    "name",
+    "asset_name",
+    "task",  # Planned task name lives here (not task_name)
+    "maintenance_status",
+    "maintenance_type",
+    "custom_maintenance_types",
+    "custom_asset_maintenance_type",
+    "completion_date",
+    "assign_to_name",
+]
+
+
+def _json_response(payload, status):
+    return Response(
+        json.dumps(payload, default=str),
+        status=status,
+        mimetype="application/json",
+    )
+
+
+def _aml_belongs_to_location(aml_name, location_name):
+    """
+    True if a Maintenance Request links this Asset Maintenance Log
+    (maintenance_log) AND its location equals the given location.
+    """
+    if not aml_name:
+        return False
+
+    return bool(
+        frappe.db.exists(
+            "Maintenance Request",
+            {
+                "maintenance_log": aml_name,
+                "location": location_name,
+            },
+        )
+    )
+
+
+def _enrich_log(log):
+    """Normalise a log dict + add stock items and task_id (same output as before)."""
+    log_dict = dict(log)
+    maintenance_kind = log_dict.get("custom_asset_maintenance_type")
+
+    if maintenance_kind == "Reactive":
+        # Reactive logs only carry custom_maintenance_types
+        log_dict.pop("maintenance_type", None)
+
+        # task_name ← custom_name_of_task
+        log_dict["task_name"] = log_dict.get("custom_name_of_task")
+        log_dict.pop("custom_name_of_task", None)
+
+        # assign_to_name ← custom_assign_to
+        log_dict["assign_to_name"] = log_dict.get("custom_assign_to")
+        log_dict.pop("custom_assign_to", None)
+
+    elif maintenance_kind == "Planned":
+        # Planned logs only carry maintenance_type
+        log_dict.pop("custom_maintenance_types", None)
+
+        # task_name ← task
+        log_dict["task_name"] = log_dict.get("task")
+        log_dict.pop("task", None)
+
+    log_dict["custom_items"] = frappe.get_all(
+        "Stock Items For Asset",
+        filters={"parent": log_dict["name"]},
+        fields=[
+            "name",
+            "item_code",
+            "qty",
+            "uom",
+            "stock_uom",
+            "conversion_factor",
+            "s_warehouse",
+        ],
+    )
+
+    log_dict["task_id"] = frappe.db.get_value(
+        "ToDo",
+        {
+            "reference_type": "Asset Maintenance Log",
+            "reference_name": log_dict["name"],
+        },
+        "name",
+    )
+
+    return log_dict
+
+
 @frappe.whitelist(allow_guest=False)
 def get_location_full_details(location_name, task_id=None):
     try:
@@ -208,29 +314,35 @@ def get_location_full_details(location_name, task_id=None):
         current_user = frappe.session.user
 
         if not current_user or current_user == "Guest":
-            return Response(
-                json.dumps({
+            return _json_response(
+                {
                     "status": "error",
                     "message": "Unauthorized. Please provide a valid Bearer token.",
-                }),
-                status=401,
-                mimetype="application/json",
+                },
+                401,
             )
 
-        # ── STEP 1b: If task_id is passed, mark that task's Asset Maintenance
-        # Log as "In Progress" (opening the task detail = work has started).
-        #   - reference_type == "Asset Maintenance Log" → update it directly
-        #   - reference_type == "Asset Maintenance"      → resolve the log
-        #     linked to it via `asset_maintenance`, then update that
+        # ── STEP 2: Validate Location (before touching any task) ───────────────
+        if not frappe.db.exists("Location", location_name):
+            return _json_response(
+                {
+                    "status": "error",
+                    "message": f"Location '{location_name}' not found",
+                },
+                404,
+            )
+
+        # ── STEP 2b: If task_id is passed, mark that task's Asset Maintenance
+        # Log as "In Progress" — ONLY if the Maintenance Request linked to that
+        # log has the same location as the location_name parameter.
         if task_id:
             if not frappe.db.exists("ToDo", task_id):
-                return Response(
-                    json.dumps({
+                return _json_response(
+                    {
                         "status": "error",
                         "message": f"Task '{task_id}' not found",
-                    }),
-                    status=404,
-                    mimetype="application/json",
+                    },
+                    404,
                 )
 
             todo = frappe.db.get_value(
@@ -241,18 +353,16 @@ def get_location_full_details(location_name, task_id=None):
             )
 
             if todo.get("allocated_to") != current_user:
-                return Response(
-                    json.dumps({
+                return _json_response(
+                    {
                         "status": "error",
                         "message": "You do not have access to this task.",
-                    }),
-                    status=403,
-                    mimetype="application/json",
+                    },
+                    403,
                 )
 
             ref_name = todo.get("reference_name")
             ref_type = todo.get("reference_type")
-
             aml_name = None
 
             if ref_type == "Asset Maintenance Log":
@@ -261,47 +371,64 @@ def get_location_full_details(location_name, task_id=None):
 
             elif ref_type == "Asset Maintenance":
                 if ref_name and frappe.db.exists("Asset Maintenance", ref_name):
-                    matching_logs = frappe.get_all(
-                        "Asset Maintenance Log",
-                        filters={"asset_maintenance": ref_name, "custom_assign_to": current_user},
-                        fields=["name"],
-                        order_by="creation desc",
-                        limit_page_length=1,
-                    )
-                    if not matching_logs:
-                        matching_logs = frappe.get_all(
+                    for filters in (
+                        {"asset_maintenance": ref_name, "custom_assign_to": current_user},
+                        {"asset_maintenance": ref_name},
+                    ):
+                        candidates = frappe.get_all(
                             "Asset Maintenance Log",
-                            filters={"asset_maintenance": ref_name},
-                            fields=["name"],
+                            filters=filters,
+                            pluck="name",
                             order_by="creation desc",
-                            limit_page_length=1,
                         )
-                    if matching_logs:
-                        aml_name = matching_logs[0]["name"]
+                        aml_name = next(
+                            (c for c in candidates if _aml_belongs_to_location(c, location_name)),
+                            None,
+                        )
+                        if aml_name:
+                            break
 
-            if aml_name and frappe.db.exists("Asset Maintenance Log", aml_name):
-                frappe.db.set_value(
-                    "Asset Maintenance Log",
-                    aml_name,
-                    "custom_employee_work_status",
-                    "In Progress",
+            if not aml_name:
+                return _json_response(
+                    {
+                        "status": "error",
+                        "message": f"No Asset Maintenance Log found for task '{task_id}' in location '{location_name}'.",
+                    },
+                    404,
                 )
-                frappe.db.commit()
 
-                frappe.log_error(
-                    title="[get_location_full_details] task status → In Progress",
-                    message=f"task_id={task_id} | ref_type={ref_type} | ref_name={ref_name} | aml={aml_name}",
+            # ── Location check via Maintenance Request ─────────────────────────
+            if not _aml_belongs_to_location(aml_name, location_name):
+                mr_location = frappe.db.get_value(
+                    "Maintenance Request",
+                    {"maintenance_log": aml_name},
+                    "location",
+                )
+                return _json_response(
+                    {
+                        "status": "error",
+                        "message": (
+                            f"Task '{task_id}' does not belong to location '{location_name}'"
+                            + (f" (it belongs to '{mr_location}')." if mr_location else " (no Maintenance Request found for its log).")
+                        ),
+                    },
+                    403,
                 )
 
-        # ── STEP 2: Validate Location ──────────────────────────────────────────
-        if not frappe.db.exists("Location", location_name):
-            return Response(
-                json.dumps({
-                    "status": "error",
-                    "message": f"Location '{location_name}' not found",
-                }),
-                status=404,
-                mimetype="application/json",
+            frappe.db.set_value(
+                "Asset Maintenance Log",
+                aml_name,
+                "custom_employee_work_status",
+                "In Progress",
+            )
+            frappe.db.commit()
+
+            frappe.log_error(
+                title="[get_location_full_details] task status → In Progress",
+                message=(
+                    f"task_id={task_id} | ref_type={ref_type} | ref_name={ref_name} "
+                    f"| aml={aml_name} | location={location_name}"
+                ),
             )
 
         # ── STEP 3: Fetch only required Location fields ────────────────────────
@@ -343,161 +470,144 @@ def get_location_full_details(location_name, task_id=None):
             ],
         )
 
-        # ── STEP 6: Enrich each Asset with Maintenance Logs ───────────────────
+        # ── STEP 5b: Non-Asset scope Maintenance Requests in this location ────
+        # custom_maintenance_scope NOT "Asset" (Unit, Common Area, Building,
+        # Infrastructure, Landscape, ...). Their logs are grouped by
+        # scope + scope_reference instead of being shown under an asset.
+        non_asset_mrs = frappe.get_all(
+            "Maintenance Request",
+            filters={
+                "location": location_name,
+                "custom_maintenance_scope": ["not in", ["Asset", ""]],
+                "maintenance_log": ["is", "set"],
+            },
+            fields=["name", "maintenance_log", "custom_maintenance_scope", "custom_scope_reference"],
+            order_by="creation asc",
+        )
+        mr_by_log = {mr["maintenance_log"]: mr for mr in non_asset_mrs}
+
+        scope_groups = {}  # (scope, reference) → entry dict
+        seen_logs = set()
+
+        def _add_to_scope(mr, log):
+            scope = mr.get("custom_maintenance_scope")
+            scope_ref = mr.get("custom_scope_reference")
+            key = (scope, scope_ref)
+            if key not in scope_groups:
+                scope_groups[key] = {
+                    "scope":            scope,
+                    "scope_reference":  scope_ref,
+                    "location":         location_name,
+                    "maintenance_logs": [],
+                }
+            seen_logs.add(log["name"])
+            scope_groups[key]["maintenance_logs"].append(_enrich_log(log))
+
+        # ── STEP 6: Enrich each Asset with Maintenance Logs (scope = Asset) ────
         enriched_assets = []
 
         for asset in assets:
             asset_dict = dict(asset)
 
-            # ── 6a: Reactive logs → custom_asset = asset["name"] ──────────────
+            # 6a: Reactive logs → custom_asset = asset["name"]
             reactive_logs = frappe.get_all(
                 "Asset Maintenance Log",
                 filters={
-                    "custom_asset":                  asset["name"],
+                    "custom_asset": asset["name"],
                     "custom_asset_maintenance_type": "Reactive",
-                    "docstatus":                     ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
+                    "docstatus": ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
                 },
-                fields=[
-                    "name",
-                    "asset_name",
-                    "custom_name_of_task",   # Reactive task name lives here
-                    "maintenance_status",
-                    "maintenance_type",
-                    "custom_maintenance_types",
-                    "custom_asset_maintenance_type",
-                    "custom_asset",
-                    "completion_date",
-                    "custom_assign_to",
-                    "assign_to_name",
-                ],
+                fields=REACTIVE_LOG_FIELDS,
             )
 
-            # ── 6b: Planned logs → asset_name = asset["asset_name"] ───────────
+            # 6b: Planned logs → asset_name = asset["asset_name"]
             planned_logs = frappe.get_all(
                 "Asset Maintenance Log",
                 filters={
-                    "asset_name":                    asset["asset_name"],
+                    "asset_name": asset["asset_name"],
                     "custom_asset_maintenance_type": "Planned",
-                    "docstatus":                     ["!=", 2],  # saved (0) + submitted (1), exclude cancelled
+                    "docstatus": ["!=", 2],
                 },
-                fields=[
-                    "name",
-                    "asset_name",
-                    "task",   # Planned task name lives here (not task_name)
-                    "maintenance_status",
-                    "maintenance_type",
-                    "custom_maintenance_types",
-                    "custom_asset_maintenance_type",
-                    "completion_date",
-                    "assign_to_name",
-                ],
+                fields=PLANNED_LOG_FIELDS,
             )
 
-            # ── 6c: Merge both log types ───────────────────────────────────────
             all_logs = reactive_logs + planned_logs
-
-            # ── 6d: Enrich each log with stock items ───────────────────────────
             enriched_logs = []
             for log in all_logs:
-                log_dict = dict(log)
+                if log["name"] in seen_logs:
+                    continue
+                if log["name"] in mr_by_log:
+                    # Non-Asset scope → goes under scope / scope_reference
+                    _add_to_scope(mr_by_log[log["name"]], log)
+                    continue
+                seen_logs.add(log["name"])
+                enriched_logs.append(_enrich_log(log))
 
-                maintenance_kind = log_dict.get("custom_asset_maintenance_type")
-
-                if maintenance_kind == "Reactive":
-                    # Reactive logs only carry custom_maintenance_types; drop maintenance_type
-                    log_dict.pop("maintenance_type", None)
-
-                    # task_name is sourced from custom_name_of_task for Reactive logs,
-                    # but the output key stays "task_name" in both cases
-                    log_dict["task_name"] = log_dict.get("custom_name_of_task")
-                    log_dict.pop("custom_name_of_task", None)
-
-                    # assign_to_name is sourced from custom_assign_to for Reactive logs,
-                    # but the output parameter name stays "assign_to_name" in both cases
-                    log_dict["assign_to_name"] = log_dict.get("custom_assign_to")
-                    log_dict.pop("custom_assign_to", None)
-
-                elif maintenance_kind == "Planned":
-                    # Planned logs only carry maintenance_type; drop custom_maintenance_types
-                    log_dict.pop("custom_maintenance_types", None)
-
-                    # task_name is sourced from "task" for Planned logs,
-                    # but the output key stays "task_name" in both cases
-                    log_dict["task_name"] = log_dict.get("task")
-                    log_dict.pop("task", None)
-
-                    # assign_to_name is already sourced correctly from its own
-                    # field for Planned logs — no remapping needed.
-
-                stock_items = frappe.get_all(
-                    "Stock Items For Asset",
-                    filters={"parent": log["name"]},
-                    fields=[
-                        "name",
-                        "item_code",
-                        "qty",
-                        "uom",
-                        "stock_uom",
-                        "conversion_factor",
-                        "s_warehouse",
-                    ],
-                )
-                log_dict["custom_items"] = stock_items
-
-                # ── 6e: task_id → ToDo linked to this Asset Maintenance Log ────
-                log_task_id = frappe.db.get_value(
-                    "ToDo",
-                    {
-                        "reference_type": "Asset Maintenance Log",
-                        "reference_name": log["name"],
-                    },
-                    "name",
-                )
-                log_dict["task_id"] = log_task_id
-
-                enriched_logs.append(log_dict)
+            # Asset whose logs ALL belong to non-Asset scopes → not shown as asset
+            if all_logs and not enriched_logs:
+                continue
 
             asset_dict["maintenance_logs"] = enriched_logs
             enriched_assets.append(asset_dict)
 
+        # ── STEP 6f: Remaining non-Asset scope logs (not linked to any asset) ─
+        for mr in non_asset_mrs:
+            aml_name = mr.get("maintenance_log")
+            if not aml_name or aml_name in seen_logs:
+                continue
+
+            aml_row = frappe.db.get_value(
+                "Asset Maintenance Log",
+                {"name": aml_name, "docstatus": ["!=", 2]},  # exclude cancelled
+                ["name", "custom_asset_maintenance_type"],
+                as_dict=True,
+            )
+            if not aml_row:
+                continue  # log missing or cancelled
+
+            aml_type = aml_row.get("custom_asset_maintenance_type")
+            fields = REACTIVE_LOG_FIELDS if aml_type == "Reactive" else PLANNED_LOG_FIELDS
+            log = frappe.db.get_value("Asset Maintenance Log", aml_name, fields, as_dict=True)
+            if not log:
+                continue
+
+            _add_to_scope(mr, log)
+
         # ── STEP 7: Build and return final response ────────────────────────────
-        return Response(
-            json.dumps(
-                {
-                    "status": "success",
-                    "data": {
-                        "location": location,
-                        "assets":   enriched_assets,
-                    }
+        # assets     → only real Asset-scope entries
+        # non_assets → Unit / Common Area / Building / Infrastructure / ...
+        return _json_response(
+            {
+                "status": "success",
+                "data": {
+                    "location": location,
+                    "assets": enriched_assets,
+                    "non_assets": list(scope_groups.values()),
                 },
-                default=str
-            ),
-            status=200,
-            mimetype="application/json",
+            },
+            200,
         )
 
     except frappe.PermissionError:
-        return Response(
-            json.dumps({
+        return _json_response(
+            {
                 "status": "error",
                 "message": "You do not have permission to access this resource",
-            }),
-            status=403,
-            mimetype="application/json",
+            },
+            403,
         )
 
     except Exception as e:
         frappe.log_error(
             title="get_location_full_details error",
-            message=frappe.get_traceback()
+            message=frappe.get_traceback(),
         )
-        return Response(
-            json.dumps({
+        return _json_response(
+            {
                 "status": "error",
                 "message": str(e),
-            }),
-            status=500,
-            mimetype="application/json",
+            },
+            500,
         )
 
 
