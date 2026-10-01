@@ -462,7 +462,7 @@ def create_maintenance_request(
       attachment_ids      → file2.jpg   (add same key again for multiple)
     """
 
-    # ── Validate maintenance_scope value ──────────────────────────
+    # ── Validate maintenance _scope value ──────────────────────────
     if maintenance_scope not in VALID_SCOPES:
         frappe.throw(
             _("maintenance_scope must be one of: {0}").format(", ".join(sorted(VALID_SCOPES))),
