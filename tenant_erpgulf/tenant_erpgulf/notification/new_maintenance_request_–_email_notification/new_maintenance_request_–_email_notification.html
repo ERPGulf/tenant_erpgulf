@@ -1,0 +1,83 @@
+<p>Dear Team,</p>
+
+<p>A new Maintenance Request has been created in ERPNext.</p>
+
+<h3>Maintenance Request Details</h3>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+    <tr>
+        <td><b>Request ID</b></td>
+        <td>{{ doc.name }}</td>
+    </tr>
+    <tr>
+        <td><b>Customer</b></td>
+        <td>{{ doc.customer or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Asset</b></td>
+        <td>{{ doc.asset or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Maintenance Type</b></td>
+        <td>{{ doc.maintenance_type or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Maintenance Scope</b></td>
+        <td>{{ doc.custom_maintenance_scope or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Description</b></td>
+        <td>{{ doc.description or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Priority</b></td>
+        <td>{{ doc.priority or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Status</b></td>
+        <td>{{ doc.status or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Maintenance Date</b></td>
+        <td>{{ doc.maintenance_date or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Date of Submit</b></td>
+        <td>{{ doc.date_of_submit or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Time Slot</b></td>
+        <td>{{ doc.time_slot or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Location</b></td>
+        <td>{{ doc.location or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Room</b></td>
+        <td>{{ doc.room or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Flat</b></td>
+        <td>{{ doc.flat or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Phone Number</b></td>
+        <td>{{ doc.phone_number or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Maintenance Log</b></td>
+        <td>{{ doc.maintenance_log or "" }}</td>
+    </tr>
+    <tr>
+        <td><b>Status Changed Date</b></td>
+        <td>{{ doc.custom_status_changed_date or "" }}</td>
+    </tr>
+</table>
+
+<p>
+Please review the Maintenance Request and take the necessary action.
+</p>
+
+<p>Regards,<br>
+ERPNext</p>

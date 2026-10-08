@@ -1,0 +1,32 @@
+{
+ "attach_files": "",
+ "attach_print": 0,
+ "channel": "Firebase Notification",
+ "condition": "doc.custom_reschedule_history_table and doc.custom_reschedule_history_table[-1].is_rescheduled",
+ "condition_type": "Python",
+ "creation": "2026-10-01 11:13:42.630995",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Asset Maintenance Log",
+ "enabled": 1,
+ "event": "Save",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "{%- set rows = doc.custom_reschedule_history_table or [] -%}\n{%- set last = rows[-1] if rows else None -%}\n{\n  \"message\": {\n    \"token\": \"{{ doc.custom_customer_token }}\",\n    \"notification\": {\n      \"title\": \"Maintenance Visit Rescheduled\",\n      \"body\": {{ (\"Dear Customer, your maintenance visit has been rescheduled to \"\n                  ~ (frappe.utils.formatdate(last.scheduled_date) if last and last.scheduled_date else \"a new date\")\n                  ~ \". Remarks: \" ~ (last.remarks if last and last.remarks else \"-\")\n                  ~ \" - Support Team\") | tojson }}\n    }\n  }\n}",
+ "message_type": "Plain Text",
+ "minutes_offset": 0,
+ "modified": "2026-10-06 09:29:19.849457",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "Firebase notification",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "owner"
+  }
+ ],
+ "send_system_notification": 0,
+ "send_to_all_assignees": 0,
+ "subject": "Maintenance Visit Rescheduled"
+}

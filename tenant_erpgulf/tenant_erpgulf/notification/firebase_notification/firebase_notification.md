@@ -1,0 +1,14 @@
+{%- set rows = doc.custom_reschedule_history_table or [] -%}
+{%- set last = rows[-1] if rows else None -%}
+{
+  "message": {
+    "token": "{{ doc.custom_customer_token }}",
+    "notification": {
+      "title": "Maintenance Visit Rescheduled",
+      "body": {{ ("Dear Customer, your maintenance visit has been rescheduled to "
+                  ~ (frappe.utils.formatdate(last.scheduled_date) if last and last.scheduled_date else "a new date")
+                  ~ ". Remarks: " ~ ((last.remarks if last and last.remarks else "-"))
+                  ~ " - Support Team") | tojson }}
+    }
+  }
+}

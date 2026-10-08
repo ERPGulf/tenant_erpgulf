@@ -1,0 +1,36 @@
+{
+ "attach_files": "",
+ "attach_print": 0,
+ "channel": "Email",
+ "condition_type": "Python",
+ "creation": "2026-10-07 12:57:25.624714",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Maintenance Request",
+ "enabled": 1,
+ "event": "New",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "<p>Dear Team,</p>\n\n<p>A new Maintenance Request has been created in ERPNext.</p>\n\n<h3>Maintenance Request Details</h3>\n\n<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse: collapse;\">\n    <tr>\n        <td><b>Request ID</b></td>\n        <td>{{ doc.name }}</td>\n    </tr>\n    <tr>\n        <td><b>Customer</b></td>\n        <td>{{ doc.customer or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Asset</b></td>\n        <td>{{ doc.asset or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Maintenance Type</b></td>\n        <td>{{ doc.maintenance_type or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Maintenance Scope</b></td>\n        <td>{{ doc.custom_maintenance_scope or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Description</b></td>\n        <td>{{ doc.description or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Priority</b></td>\n        <td>{{ doc.priority or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Status</b></td>\n        <td>{{ doc.status or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Maintenance Date</b></td>\n        <td>{{ doc.maintenance_date or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Date of Submit</b></td>\n        <td>{{ doc.date_of_submit or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Time Slot</b></td>\n        <td>{{ doc.time_slot or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Location</b></td>\n        <td>{{ doc.location or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Room</b></td>\n        <td>{{ doc.room or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Flat</b></td>\n        <td>{{ doc.flat or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Phone Number</b></td>\n        <td>{{ doc.phone_number or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Maintenance Log</b></td>\n        <td>{{ doc.maintenance_log or \"\" }}</td>\n    </tr>\n    <tr>\n        <td><b>Status Changed Date</b></td>\n        <td>{{ doc.custom_status_changed_date or \"\" }}</td>\n    </tr>\n</table>\n\n<p>\nPlease review the Maintenance Request and take the necessary action.\n</p>\n\n<p>Regards,<br>\nERPNext</p>",
+ "message_type": "HTML",
+ "minutes_offset": 0,
+ "modified": "2026-10-07 12:57:39.482017",
+ "modified_by": "Administrator",
+ "module": "tenant_erpgulf",
+ "name": "New Maintenance Request \u2013 Email Notification",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "cc": "kadher@bayatplaza.com"
+  },
+  {
+   "cc": "amro@bayatplaza.com"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "malavika@htsqatar.com",
+ "sender_email": "malavika@htsqatar.com",
+ "subject": "New Maintenance Request: {{ doc.name }} - {{ doc.priority }}"
+}

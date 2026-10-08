@@ -28,13 +28,13 @@
   "doctype_event": "Before Save",
   "enable_rate_limit": 0,
   "event_frequency": "All",
-  "modified": "2026-09-26 20:20:05.982322",
+  "modified": "2026-10-02 08:50:56.504082",
   "module": "tenant_erpgulf",
   "name": "Notification Send",
   "rate_limit_count": 5,
   "rate_limit_seconds": 86400,
   "reference_doctype": "Asset Maintenance Log",
-  "script": "history = doc.get(\"custom_reschedule_history_table\")\nif history:\n    last_row = history[-1]\n    if last_row.is_rescheduled and  last_row.notification_send == 1:\n        frappe.get_doc(\"Notification\", \"Reschedule Alert to Customer\").send(doc)\n        last_row.notification_send = 0",
+  "script": "history = doc.get(\"custom_reschedule_history_table\")\nif history:\n    last_row = history[-1]\n    if last_row.is_rescheduled and  last_row.notification_send == 1:\n        frappe.get_doc(\"Notification\", \"Firebase notification\").send(doc)\n        last_row.notification_send = 0",
   "script_type": "DocType Event"
  },
  {
